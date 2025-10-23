@@ -2,7 +2,7 @@ import React, { useState, useContext, createContext, useMemo } from 'react';
 import { HashRouter, Routes, Route, Link, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { User } from './types';
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
+import DashboardPage from './DashboardPage';
 import SalesPage from './pages/SalesPage';
 import ProductsPage from './pages/ProductsPage';
 
