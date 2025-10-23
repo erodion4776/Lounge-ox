@@ -1,247 +1,386 @@
-import React, { useState, useContext, createContext, useMemo, useEffect } from 'react';
-import { HashRouter, Routes, Route, Link, Outlet, Navigate, useLocation } from 'react-router-dom';
-import { User } from './types';
-import { api } from './services/api';
-import { supabase } from './services/supabase';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './DashboardPage';
-import SalesPage from './pages/SalesPage';
-import ProductsPage from './pages/ProductsPage';
-import UsersPage from './pages/UsersPage';
+import { supabase } from './supabase';
+import { User, Product, Sale, DashboardStats } from '../types';
 
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  login: (user: User) => void;
-  logout: () => void;
-}
+export const api = {
+  // ============ AUTHENTICATION ============
+  
+  signIn: async (email: string, password: string): Promise<User> => {
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-const AuthContext = createContext<AuthContextType | null>(null);
+    if (authError) throw new Error(authError.message);
+    if (!authData.user) throw new Error('No user data returned');
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+    // Get user profile from public.users table
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', authData.user.id)
+      .single();
 
-const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+    if (userError) throw new Error(userError.message);
+    if (!userData) throw new Error('User profile not found');
 
-  useEffect(() => {
-    // Check active session
-    const initAuth = async () => {
-      try {
-        const currentUser = await api.getCurrentUser();
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Failed to get current user:', error);
-      } finally {
-        setLoading(false);
-      }
+    return {
+      id: userData.id,
+      email: userData.email,
+      name: userData.name,
+      role: userData.role,
     };
+  },
 
-    initAuth();
+  // Sign up removed - only admins can create users via saveUser()
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        try {
-          const currentUser = await api.getCurrentUser();
-          setUser(currentUser);
-        } catch (error) {
-          console.error('Failed to get user on sign in:', error);
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
+  signOut: async (): Promise<void> => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw new Error(error.message);
+  },
+
+  getCurrentUser: async (): Promise<User | null> => {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) return null;
+
+    const { data: userData, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
+
+    if (error || !userData) return null;
+
+    return {
+      id: userData.id,
+      email: userData.email,
+      name: userData.name,
+      role: userData.role,
+    };
+  },
+
+  // ============ DASHBOARD ============
+
+  getDashboardStats: async (): Promise<DashboardStats> => {
+    // Get all sales
+    const { data: sales, error: salesError } = await supabase
+      .from('sales')
+      .select('*')
+      .order('date', { ascending: false });
+
+    if (salesError) throw new Error(salesError.message);
+
+    // Get all products
+    const { data: products, error: productsError } = await supabase
+      .from('products')
+      .select('*');
+
+    if (productsError) throw new Error(productsError.message);
+
+    // Calculate stats
+    const totalRevenue = sales?.reduce((sum, sale) => sum + Number(sale.total_price), 0) || 0;
+
+    // Create a map for quick product lookup
+    const productsMap = new Map(products?.map(p => [p.id, p]) || []);
+    
+    // Calculate total profit
+    const totalProfit = sales?.reduce((sum, sale) => {
+      const product = productsMap.get(sale.product_id);
+      return product ? sum + (Number(sale.total_price) - (Number(product.cost) * sale.quantity)) : sum;
+    }, 0) || 0;
+
+    // Sales today
+    const today = new Date().toISOString().split('T')[0];
+    const salesToday = sales?.filter(s => s.date.startsWith(today)).length || 0;
+
+    // Low stock items (less than 10)
+    const lowStockItems = products?.filter(p => p.stock < 10).length || 0;
+
+    // Sales by day for last 7 days
+    const salesByDay: { [key: string]: number } = {};
+    sales?.forEach(sale => {
+      const day = new Date(sale.date).toLocaleDateString('en-US', { weekday: 'short' });
+      const product = productsMap.get(sale.product_id);
+      if (product) {
+        const profit = Number(sale.total_price) - (Number(product.cost) * sale.quantity);
+        salesByDay[day] = (salesByDay[day] || 0) + profit;
       }
     });
 
-    return () => {
-      subscription.unsubscribe();
+    const last7Days = Array.from({ length: 7 }).map((_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      return d.toLocaleDateString('en-US', { weekday: 'short' });
+    }).reverse();
+
+    const chartData = last7Days.map(day => ({ day, profit: salesByDay[day] || 0 }));
+
+    return {
+      totalRevenue,
+      totalProfit,
+      salesToday,
+      lowStockItems,
+      salesByDay: chartData,
     };
-  }, []);
+  },
 
-  const login = (newUser: User) => {
-    setUser(newUser);
-  };
+  // ============ PRODUCTS ============
 
-  const logout = async () => {
-    try {
-      await api.signOut();
-      setUser(null);
-    } catch (error) {
-      console.error('Logout error:', error);
+  getProducts: async (): Promise<Product[]> => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) throw new Error(error.message);
+    
+    return (data || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      price: Number(p.price),
+      cost: Number(p.cost),
+      stock: p.stock,
+    }));
+  },
+
+  saveProduct: async (product: Omit<Product, 'id'> & { id?: string }): Promise<Product> => {
+    if (product.id) {
+      // Update existing product
+      const { data, error } = await supabase
+        .from('products')
+        .update({
+          name: product.name,
+          price: product.price,
+          cost: product.cost,
+          stock: product.stock,
+        })
+        .eq('id', product.id)
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error('Failed to update product');
+
+      return {
+        id: data.id,
+        name: data.name,
+        price: Number(data.price),
+        cost: Number(data.cost),
+        stock: data.stock,
+      };
+    } else {
+      // Create new product
+      const { data, error } = await supabase
+        .from('products')
+        .insert({
+          name: product.name,
+          price: product.price,
+          cost: product.cost,
+          stock: product.stock,
+        })
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error('Failed to create product');
+
+      return {
+        id: data.id,
+        name: data.name,
+        price: Number(data.price),
+        cost: Number(data.cost),
+        stock: data.stock,
+      };
     }
-  };
+  },
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading]);
+  deleteProduct: async (productId: string): Promise<void> => {
+    const { error } = await supabase
+      .from('products')
+      .delete()
+      .eq('id', productId);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+    if (error) throw new Error(error.message);
+  },
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading } = useAuth();
-  
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-400"></div>
-          <p className="mt-4 text-gray-400">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-  
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  return <>{children}</>;
-};
+  // ============ SALES ============
 
-const Sidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
-    const { user, logout } = useAuth();
-    const location = useLocation();
+  getSales: async (): Promise<Sale[]> => {
+    const { data, error } = await supabase
+      .from('sales')
+      .select('*')
+      .order('date', { ascending: false })
+      .limit(50); // Get last 50 sales
 
-    const navItems = [
-        { path: '/', label: 'Dashboard', icon: <HomeIcon /> },
-        { path: '/sales', label: 'Sales', icon: <ChartBarIcon /> },
-        { path: '/products', label: 'Products', icon: <CubeIcon /> },
-    ];
-    
-    const adminNavItems = user?.role === 'admin' ? [
-        { path: '/users', label: 'Users', icon: <UsersIcon /> },
-    ] : [];
+    if (error) throw new Error(error.message);
 
-    const NavLink: React.FC<{ path: string; label: string; icon: React.ReactNode }> = ({ path, label, icon }) => {
-        const isActive = location.pathname === path;
-        return (
-            <Link to={path} onClick={onNavigate} className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive ? 'bg-gray-700 text-amber-400' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}`}>
-                <span className="mr-3">{icon}</span>
-                {label}
-            </Link>
+    return (data || []).map(s => ({
+      id: s.id,
+      productId: s.product_id,
+      productName: s.product_name,
+      quantity: s.quantity,
+      totalPrice: Number(s.total_price),
+      date: s.date,
+    }));
+  },
+
+  logSale: async (productId: string, quantity: number): Promise<Sale> => {
+    // Get current user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Get product details
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', productId)
+      .single();
+
+    if (productError) throw new Error(productError.message);
+    if (!product) throw new Error('Product not found');
+
+    // Check stock
+    if (product.stock < quantity) {
+      throw new Error(`Not enough stock. Available: ${product.stock}`);
+    }
+
+    // Update stock
+    const { error: updateError } = await supabase
+      .from('products')
+      .update({ stock: product.stock - quantity })
+      .eq('id', productId);
+
+    if (updateError) throw new Error(updateError.message);
+
+    // Log sale
+    const totalPrice = Number(product.price) * quantity;
+    const { data: sale, error: saleError } = await supabase
+      .from('sales')
+      .insert({
+        product_id: productId,
+        product_name: product.name,
+        quantity,
+        total_price: totalPrice,
+        user_id: user.id,
+      })
+      .select()
+      .single();
+
+    if (saleError) throw new Error(saleError.message);
+    if (!sale) throw new Error('Failed to log sale');
+
+    return {
+      id: sale.id,
+      productId: sale.product_id,
+      productName: sale.product_name,
+      quantity: sale.quantity,
+      totalPrice: Number(sale.total_price),
+      date: sale.date,
+    };
+  },
+
+  // ============ USERS ============
+
+  getUsers: async (): Promise<User[]> => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (error) throw new Error(error.message);
+
+    return (data || []).map(u => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+    }));
+  },
+
+  saveUser: async (user: Omit<User, 'id'> & { id?: string; password?: string }): Promise<User> => {
+    if (user.id) {
+      // Update existing user
+      const { data, error } = await supabase
+        .from('users')
+        .update({
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error('Failed to update user');
+
+      // Update password if provided
+      if (user.password) {
+        const { error: passwordError } = await supabase.auth.admin.updateUserById(
+          user.id,
+          { password: user.password }
         );
-    };
-    
-    const handleLogout = () => {
-        logout();
-        if (onNavigate) {
-            onNavigate();
-        }
-    };
+        if (passwordError) throw new Error(passwordError.message);
+      }
 
-    return (
-        <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
-            <div className="flex items-center justify-center h-16 lg:h-20 border-b border-gray-800">
-                <Link to="/" onClick={onNavigate}>
-                    <h1 className="text-2xl font-bold text-amber-400 tracking-wider">XO</h1>
-                </Link>
-            </div>
-            <nav className="flex-1 p-4 space-y-2">
-                {navItems.map(item => <NavLink key={item.path} {...item} />)}
-                {adminNavItems.length > 0 && <hr className="border-gray-700 my-2" />}
-                {adminNavItems.map(item => <NavLink key={item.path} {...item} />)}
-            </nav>
-            <div className="p-4 border-t border-gray-800">
-                <div className="mb-3 px-4 py-2 bg-gray-800 rounded-lg">
-                    <p className="text-xs text-gray-400">Signed in as</p>
-                    <p className="text-sm font-medium text-white truncate">{user?.name}</p>
-                    <p className="text-xs text-gray-400 truncate">{user?.email}</p>
-                </div>
-                <button onClick={handleLogout} className="w-full flex items-center justify-center px-4 py-3 text-sm font-medium rounded-lg text-gray-300 hover:bg-red-500 hover:text-white transition-colors">
-                    <LogoutIcon />
-                    <span className="ml-3">Logout</span>
-                </button>
-            </div>
-        </div>
-    );
+      return {
+        id: data.id,
+        email: data.email,
+        name: data.name,
+        role: data.role,
+      };
+    } else {
+      // Create new user
+      if (!user.password) throw new Error('Password is required for new users');
+
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: user.email,
+        password: user.password,
+        email_confirm: true, // Auto-confirm email
+      });
+
+      if (authError) throw new Error(authError.message);
+      if (!authData.user) throw new Error('Failed to create user');
+
+      // Create user profile
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .insert({
+          id: authData.user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        })
+        .select()
+        .single();
+
+      if (userError) {
+        // Cleanup
+        await supabase.auth.admin.deleteUser(authData.user.id);
+        throw new Error(userError.message);
+      }
+
+      if (!userData) throw new Error('Failed to create user profile');
+
+      return {
+        id: userData.id,
+        email: userData.email,
+        name: userData.name,
+        role: userData.role,
+      };
+    }
+  },
+
+  deleteUser: async (userId: string): Promise<void> => {
+    // Delete from public.users first (will cascade)
+    const { error: deleteError } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', userId);
+
+    if (deleteError) throw new Error(deleteError.message);
+
+    // Delete auth user
+    const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+    if (authError) throw new Error(authError.message);
+  },
 };
-
-const ProtectedLayout: React.FC = () => {
-    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-    return (
-      <div className="flex h-screen bg-gray-900 text-gray-100 overflow-hidden">
-        {/* Static sidebar for desktop */}
-        <div className="hidden lg:flex lg:flex-shrink-0">
-          <Sidebar />
-        </div>
-  
-        {/* Mobile sidebar */}
-        <div className={`fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-300 ease-in-out lg:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-            <Sidebar onNavigate={() => setIsSidebarOpen(false)} />
-        </div>
-  
-        {/* Overlay for mobile */}
-        {isSidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
-            onClick={() => setIsSidebarOpen(false)}
-            aria-hidden="true"
-          ></div>
-        )}
-  
-        <div className="flex flex-col flex-1 min-w-0">
-          {/* Mobile header */}
-          <div className="lg:hidden flex-shrink-0 flex h-16 bg-gray-900 border-b border-gray-800 items-center justify-between px-4">
-            <button
-              type="button"
-              onClick={() => setIsSidebarOpen(true)}
-              className="text-gray-400 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-amber-500 p-1 rounded-md"
-              aria-label="Open sidebar"
-            >
-              <span className="sr-only">Open sidebar</span>
-              <MenuIcon />
-            </button>
-            <Link to="/" className="flex items-center">
-                <h1 className="text-xl font-bold text-amber-400 tracking-wider">XO</h1>
-            </Link>
-            <div className="w-8"></div> {/* Spacer to balance the button */}
-          </div>
-  
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-            <Outlet />
-          </main>
-        </div>
-      </div>
-    );
-};
-
-const App = () => {
-  return (
-    <AuthProvider>
-      <HashRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/*" element={
-            <ProtectedRoute>
-              <Routes>
-                <Route element={<ProtectedLayout />}>
-                    <Route index element={<DashboardPage />} />
-                    <Route path="sales" element={<SalesPage />} />
-                    <Route path="products" element={<ProductsPage />} />
-                    <Route path="users" element={<UsersPage />} />
-                    <Route path="*" element={<Navigate to="/" />} />
-                </Route>
-              </Routes>
-            </ProtectedRoute>
-          } />
-        </Routes>
-      </HashRouter>
-    </AuthProvider>
-  );
-};
-
-// Icons
-const HomeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>;
-const ChartBarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
-const CubeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>;
-const LogoutIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>;
-const MenuIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>;
-const UsersIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197m0 0A5.975 5.975 0 0112 13a5.975 5.975 0 013 5.197M15 21a6 6 0 00-9-5.197" /></svg>;
-
-export default App;
