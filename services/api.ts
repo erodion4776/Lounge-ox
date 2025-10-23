@@ -1,202 +1,247 @@
-import { User, Product, Sale, DashboardStats } from '../types';
+import React, { useState, useContext, createContext, useMemo, useEffect } from 'react';
+import { HashRouter, Routes, Route, Link, Outlet, Navigate, useLocation } from 'react-router-dom';
+import { User } from './types';
+import { api } from './services/api';
+import { supabase } from './services/supabase';
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './DashboardPage';
+import SalesPage from './pages/SalesPage';
+import ProductsPage from './pages/ProductsPage';
+import UsersPage from './pages/UsersPage';
 
-// --- MOCK DATABASE ---
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+  login: (user: User) => void;
+  logout: () => void;
+}
 
-// USERS
-let mockUsers: (User & { password?: string })[] = [
-    { id: '1', email: 'eroeliza1234@gmail.com', name: 'Admin', role: 'admin', password: '1220iloveyou' },
-    { id: '2', email: 'staff@xo.com', name: 'Sales Staff', role: 'sales_staff', password: 'password' },
-];
-let nextUserId = mockUsers.length + 1;
+const AuthContext = createContext<AuthContextType | null>(null);
 
-// PRODUCTS
-let mockProducts: Product[] = [
-    { id: '1', name: 'Premium Laptop', price: 750000, stock: 15, cost: 550000 },
-    { id: '2', name: 'Wireless Mouse', price: 25000, stock: 40, cost: 15000 },
-    { id: '3', name: 'Mechanical Keyboard', price: 80000, stock: 25, cost: 50000 },
-    { id: '4', name: '4K Monitor', price: 350000, stock: 8, cost: 280000 },
-    { id: '5', name: 'USB-C Hub', price: 45000, stock: 30, cost: 30000 },
-    { id: '6', name: 'Webcam HD', price: 55000, stock: 0, cost: 40000 },
-];
-
-let mockSales: Sale[] = [
-    { id: 's1', productId: '1', productName: 'Premium Laptop', quantity: 1, totalPrice: 750000, date: new Date(Date.now() - 86400000 * 2).toISOString() },
-    { id: 's2', productId: '3', productName: 'Mechanical Keyboard', quantity: 2, totalPrice: 160000, date: new Date(Date.now() - 86400000 * 1).toISOString() },
-    { id: 's3', productId: '2', productName: 'Wireless Mouse', quantity: 5, totalPrice: 125000, date: new Date().toISOString() },
-    { id: 's4', productId: '4', productName: '4K Monitor', quantity: 1, totalPrice: 350000, date: new Date(Date.now() - 86400000 * 3).toISOString() },
-];
-
-let nextProductId = mockProducts.length + 1;
-let nextSaleId = mockSales.length + 1;
-
-// --- API FUNCTIONS ---
-export const api = {
-  signIn: async (email: string, password: string): Promise<User> => {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => { // Simulate network delay
-        const user = mockUsers.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-        if (user) {
-          const { password, ...userWithoutPassword } = user;
-          resolve(userWithoutPassword as User);
-        } else {
-          reject(new Error('Invalid credentials'));
-        }
-      }, 500);
-    });
-  },
-
-  getDashboardStats: async (): Promise<DashboardStats> => {
-    const totalRevenue = mockSales.reduce((sum, sale) => sum + sale.totalPrice, 0);
-    
-    const productsMap = new Map(mockProducts.map(p => [p.id, p]));
-    const totalProfit = mockSales.reduce((sum, sale) => {
-        const product = productsMap.get(sale.productId);
-        return product ? sum + (sale.totalPrice - (product.cost * sale.quantity)) : sum;
-    }, 0);
-
-    const today = new Date().toISOString().split('T')[0];
-    const salesToday = mockSales.filter(s => s.date.startsWith(today)).length;
-    
-    const lowStockItems = mockProducts.filter(p => p.stock < 10).length;
-    
-    const salesByDay: { [key: string]: number } = {};
-    mockSales.forEach(sale => {
-        const day = new Date(sale.date).toLocaleDateString('en-US', { weekday: 'short' });
-        const product = productsMap.get(sale.productId);
-        if (product) {
-            const profit = sale.totalPrice - (product.cost * sale.quantity);
-            salesByDay[day] = (salesByDay[day] || 0) + profit;
-        }
-    });
-    
-    const last7Days = Array.from({length: 7}).map((_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      return d.toLocaleDateString('en-US', { weekday: 'short' });
-    }).reverse();
-
-    const chartData = last7Days.map(day => ({ day, profit: salesByDay[day] || 0 }));
-
-    return { totalRevenue, totalProfit, salesToday, lowStockItems, salesByDay: chartData };
-  },
-
-  getProducts: async (): Promise<Product[]> => {
-    return [...mockProducts].sort((a, b) => a.name.localeCompare(b.name));
-  },
-
-  getSales: async (): Promise<Sale[]> => {
-    return [...mockSales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  },
-
-  logSale: async (productId: string, quantity: number): Promise<Sale> => {
-    const product = mockProducts.find(p => p.id === productId);
-        
-    if (!product) throw new Error('Product not found');
-    if (product.stock < quantity) throw new Error('Not enough stock');
-
-    product.stock -= quantity;
-
-    const newSale: Sale = {
-      id: `s${nextSaleId++}`,
-      productId: productId,
-      productName: product.name,
-      quantity,
-      totalPrice: product.price * quantity,
-      date: new Date().toISOString(),
-    };
-    mockSales.push(newSale);
-    return newSale;
-  },
-
-  saveProduct: async (product: Omit<Product, 'id'> & { id?: string }): Promise<Product> => {
-    if (product.id) {
-      const index = mockProducts.findIndex(p => p.id === product.id);
-      if (index !== -1) {
-        mockProducts[index] = { ...mockProducts[index], ...product };
-        return mockProducts[index];
-      }
-      throw new Error('Failed to update product.');
-    } else {
-      const newProduct: Product = {
-        id: `${nextProductId++}`,
-        ...product,
-      } as Product;
-      mockProducts.push(newProduct);
-      return newProduct;
-    }
-  },
-
-  deleteProduct: async (productId: string): Promise<void> => {
-    const index = mockProducts.findIndex(p => p.id === productId);
-    if (index > -1) {
-      mockProducts.splice(index, 1);
-      return;
-    }
-    throw new Error('Failed to delete product.');
-  },
-
-  // USER MANAGEMENT API
-  getUsers: async (): Promise<User[]> => {
-    return new Promise((resolve) => {
-        setTimeout(() => {
-            resolve(mockUsers.map(({ password, ...user }) => user));
-        }, 300);
-    });
-  },
-
-  saveUser: async (user: Omit<User, 'id'> & { id?: string, password?: string }): Promise<User> => {
-     return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            if (user.id) { // Update
-                const index = mockUsers.findIndex(u => u.id === user.id);
-                if (index !== -1) {
-                    const existingUser = mockUsers[index];
-                    const updatedUser = { 
-                        ...existingUser, 
-                        name: user.name,
-                        email: user.email,
-                        role: user.role,
-                        // Only update password if a new one is provided and not empty
-                        password: user.password ? user.password : existingUser.password
-                    };
-                    mockUsers[index] = updatedUser;
-                    const { password, ...userToReturn } = updatedUser;
-                    resolve(userToReturn as User);
-                } else {
-                    reject(new Error('User not found for update.'));
-                }
-            } else { // Create
-                if (!user.password) {
-                    reject(new Error('Password is required for new users.'));
-                    return;
-                }
-                const newUser = {
-                    ...user,
-                    id: `${nextUserId++}`,
-                } as (User & { password?: string });
-                mockUsers.push(newUser);
-                const { password, ...userToReturn } = newUser;
-                resolve(userToReturn as User);
-            }
-        }, 500);
-    });
-  },
-
-  deleteUser: async (userId: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-        setTimeout(() => {
-            const index = mockUsers.findIndex(u => u.id === userId);
-            if (index > -1) {
-                if (mockUsers[index].email === 'eroeliza1234@gmail.com') {
-                    reject(new Error('Cannot delete the main admin account.'));
-                    return;
-                }
-                mockUsers.splice(index, 1);
-                resolve();
-            } else {
-                reject(new Error('Failed to delete user.'));
-            }
-        }, 500);
-    });
-  },
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };
+
+const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check active session
+    const initAuth = async () => {
+      try {
+        const currentUser = await api.getCurrentUser();
+        setUser(currentUser);
+      } catch (error) {
+        console.error('Failed to get current user:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        try {
+          const currentUser = await api.getCurrentUser();
+          setUser(currentUser);
+        } catch (error) {
+          console.error('Failed to get user on sign in:', error);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const login = (newUser: User) => {
+    setUser(newUser);
+  };
+
+  const logout = async () => {
+    try {
+      await api.signOut();
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-400"></div>
+          <p className="mt-4 text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
+const Sidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
+    const { user, logout } = useAuth();
+    const location = useLocation();
+
+    const navItems = [
+        { path: '/', label: 'Dashboard', icon: <HomeIcon /> },
+        { path: '/sales', label: 'Sales', icon: <ChartBarIcon /> },
+        { path: '/products', label: 'Products', icon: <CubeIcon /> },
+    ];
+    
+    const adminNavItems = user?.role === 'admin' ? [
+        { path: '/users', label: 'Users', icon: <UsersIcon /> },
+    ] : [];
+
+    const NavLink: React.FC<{ path: string; label: string; icon: React.ReactNode }> = ({ path, label, icon }) => {
+        const isActive = location.pathname === path;
+        return (
+            <Link to={path} onClick={onNavigate} className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive ? 'bg-gray-700 text-amber-400' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}`}>
+                <span className="mr-3">{icon}</span>
+                {label}
+            </Link>
+        );
+    };
+    
+    const handleLogout = () => {
+        logout();
+        if (onNavigate) {
+            onNavigate();
+        }
+    };
+
+    return (
+        <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
+            <div className="flex items-center justify-center h-16 lg:h-20 border-b border-gray-800">
+                <Link to="/" onClick={onNavigate}>
+                    <h1 className="text-2xl font-bold text-amber-400 tracking-wider">XO</h1>
+                </Link>
+            </div>
+            <nav className="flex-1 p-4 space-y-2">
+                {navItems.map(item => <NavLink key={item.path} {...item} />)}
+                {adminNavItems.length > 0 && <hr className="border-gray-700 my-2" />}
+                {adminNavItems.map(item => <NavLink key={item.path} {...item} />)}
+            </nav>
+            <div className="p-4 border-t border-gray-800">
+                <div className="mb-3 px-4 py-2 bg-gray-800 rounded-lg">
+                    <p className="text-xs text-gray-400">Signed in as</p>
+                    <p className="text-sm font-medium text-white truncate">{user?.name}</p>
+                    <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                </div>
+                <button onClick={handleLogout} className="w-full flex items-center justify-center px-4 py-3 text-sm font-medium rounded-lg text-gray-300 hover:bg-red-500 hover:text-white transition-colors">
+                    <LogoutIcon />
+                    <span className="ml-3">Logout</span>
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const ProtectedLayout: React.FC = () => {
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+    return (
+      <div className="flex h-screen bg-gray-900 text-gray-100 overflow-hidden">
+        {/* Static sidebar for desktop */}
+        <div className="hidden lg:flex lg:flex-shrink-0">
+          <Sidebar />
+        </div>
+  
+        {/* Mobile sidebar */}
+        <div className={`fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-300 ease-in-out lg:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <Sidebar onNavigate={() => setIsSidebarOpen(false)} />
+        </div>
+  
+        {/* Overlay for mobile */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+            aria-hidden="true"
+          ></div>
+        )}
+  
+        <div className="flex flex-col flex-1 min-w-0">
+          {/* Mobile header */}
+          <div className="lg:hidden flex-shrink-0 flex h-16 bg-gray-900 border-b border-gray-800 items-center justify-between px-4">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="text-gray-400 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-amber-500 p-1 rounded-md"
+              aria-label="Open sidebar"
+            >
+              <span className="sr-only">Open sidebar</span>
+              <MenuIcon />
+            </button>
+            <Link to="/" className="flex items-center">
+                <h1 className="text-xl font-bold text-amber-400 tracking-wider">XO</h1>
+            </Link>
+            <div className="w-8"></div> {/* Spacer to balance the button */}
+          </div>
+  
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    );
+};
+
+const App = () => {
+  return (
+    <AuthProvider>
+      <HashRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/*" element={
+            <ProtectedRoute>
+              <Routes>
+                <Route element={<ProtectedLayout />}>
+                    <Route index element={<DashboardPage />} />
+                    <Route path="sales" element={<SalesPage />} />
+                    <Route path="products" element={<ProductsPage />} />
+                    <Route path="users" element={<UsersPage />} />
+                    <Route path="*" element={<Navigate to="/" />} />
+                </Route>
+              </Routes>
+            </ProtectedRoute>
+          } />
+        </Routes>
+      </HashRouter>
+    </AuthProvider>
+  );
+};
+
+// Icons
+const HomeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>;
+const ChartBarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
+const CubeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>;
+const LogoutIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>;
+const MenuIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>;
+const UsersIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197m0 0A5.975 5.975 0 0112 13a5.975 5.975 0 013 5.197M15 21a6 6 0 00-9-5.197" /></svg>;
+
+export default App;
