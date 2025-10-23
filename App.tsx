@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './DashboardPage';
 import SalesPage from './pages/SalesPage';
 import ProductsPage from './pages/ProductsPage';
+import { supabase } from './services/supabase';
 
 interface AuthContextType {
   user: User | null;
@@ -149,6 +150,25 @@ const ProtectedLayout: React.FC = () => {
 };
 
 const App = () => {
+  if (!supabase) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <div className="w-full max-w-lg p-8 space-y-4 bg-gray-800 rounded-lg shadow-lg border border-gray-700 text-center">
+          <h1 className="text-3xl font-bold text-red-500">Configuration Error</h1>
+          <p className="text-gray-300">
+            Your Supabase environment variables are not set.
+          </p>
+          <p className="text-gray-400 text-sm mt-2">
+            The application cannot connect to the database. Please make sure to set the
+            <code className="bg-gray-700 p-1 rounded-md mx-1 font-mono">VITE_SUPABASE_URL</code> and
+            <code className="bg-gray-700 p-1 rounded-md mx-1 font-mono">VITE_SUPABASE_ANON_KEY</code>
+            environment variables in your project configuration.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <AuthProvider>
       <HashRouter>

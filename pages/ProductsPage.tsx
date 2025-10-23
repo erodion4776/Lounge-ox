@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Product } from '../types';
@@ -68,6 +67,7 @@ const ProductsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     const fetchProducts = async () => {
         setLoading(true);
@@ -105,6 +105,10 @@ const ProductsPage: React.FC = () => {
     
     const lowStockCount = products.filter(p => p.stock < 10).length;
 
+    const filteredProducts = products.filter(product =>
+        product.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
     return (
         <div className="space-y-8">
             <div className="flex justify-between items-center">
@@ -116,6 +120,15 @@ const ProductsPage: React.FC = () => {
                     <button onClick={handleAdd} className="bg-amber-500 text-gray-900 font-bold py-2 px-4 rounded-lg hover:bg-amber-600 transition-colors">Add Product</button>
                 )}
             </div>
+
+            <input
+              type="search"
+              placeholder="Search products by name..."
+              aria-label="Search products"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full max-w-lg bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-amber-500 focus:border-amber-500 placeholder-gray-400"
+            />
 
             {lowStockCount > 0 && (
                 <div className="bg-yellow-900 border-l-4 border-yellow-500 text-yellow-100 p-4" role="alert">
@@ -141,7 +154,13 @@ const ProductsPage: React.FC = () => {
                         <tbody className="bg-gray-800 divide-y divide-gray-700">
                             {loading ? (
                                 <tr><td colSpan={user?.role === 'admin' ? 5 : 4} className="text-center py-4">Loading products...</td></tr>
-                            ) : products.map((product) => (
+                            ) : filteredProducts.length === 0 ? (
+                                <tr>
+                                    <td colSpan={user?.role === 'admin' ? 5 : 4} className="text-center py-4 text-gray-400">
+                                        {searchTerm ? `No products found matching "${searchTerm}"` : 'No products available.'}
+                                    </td>
+                                </tr>
+                            ) : filteredProducts.map((product) => (
                                 <tr key={product.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{product.name}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
