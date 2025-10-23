@@ -1,9 +1,8 @@
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { api } from '../services/api';
-import { useAuth } from '../App';
-import { DashboardStats, Product, Sale } from '../types';
+import { api } from './services/api';
+import { useAuth } from './App';
+import { DashboardStats } from './types';
 
 const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode }> = ({ title, value, icon }) => (
   <div className="bg-gray-800 p-6 rounded-lg border border-gray-700 flex items-center space-x-4">
@@ -14,48 +13,6 @@ const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode }
     </div>
   </div>
 );
-
-const SalesInsight: React.FC = () => {
-    const [insights, setInsights] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const fetchInsights = useCallback(async () => {
-        setLoading(true);
-        try {
-            const products = await api.getProducts();
-            const sales = await api.getSales();
-            const result = await api.generateSalesInsights(products, sales);
-            setInsights(result);
-        } catch (error) {
-            setInsights('Could not fetch AI insights.');
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    return (
-        <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <h3 className="text-lg font-semibold text-amber-400 mb-4">AI Sales Insights</h3>
-            {insights ? (
-                 <div className="text-gray-300 whitespace-pre-wrap prose prose-invert prose-sm max-w-none">
-                    {insights.split('*').map((item, index) => item.trim() && <p key={index} className="my-1">{`• ${item.trim()}`}</p>)}
-                </div>
-            ) : (
-                <div className="text-center text-gray-400">
-                    <p>Click the button to generate sales insights using Gemini.</p>
-                </div>
-            )}
-             <button
-                onClick={fetchInsights}
-                disabled={loading}
-                className="mt-4 w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-gray-900 bg-amber-400 hover:bg-amber-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-amber-500 disabled:bg-gray-600"
-                >
-                {loading ? 'Generating...' : 'Generate Insights'}
-            </button>
-        </div>
-    );
-};
-
 
 const DashboardPage: React.FC = () => {
   const { user } = useAuth();
@@ -95,21 +52,22 @@ const DashboardPage: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-gray-800 p-6 rounded-lg border border-gray-700">
+        <div className="lg:col-span-3 bg-gray-800 p-6 rounded-lg border border-gray-700">
             <h3 className="text-lg font-semibold text-amber-400 mb-4">Weekly Profit</h3>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={350}>
                 <BarChart data={stats.salesByDay} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#4a5568" />
                     <XAxis dataKey="day" stroke="#a0aec0" fontSize={12} />
-                    <YAxis stroke="#a0aec0" fontSize={12} tickFormatter={(value) => `₦${value}`} />
-                    <Tooltip contentStyle={{ backgroundColor: '#2d3748', border: '1px solid #4a5568' }} cursor={{fill: 'rgba(245, 158, 11, 0.1)'}} />
-                    <Legend wrapperStyle={{fontSize: "14px"}}/>
-                    <Bar dataKey="profit" fill="#f59e0b" name="Profit" />
+                    <YAxis stroke="#a0aec0" fontSize={12} tickFormatter={(value) => `₦${Math.round(value / 1000)}k`} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#2d3748', border: '1px solid #4a5568', borderRadius: '0.5rem' }} 
+                      cursor={{fill: 'rgba(245, 158, 11, 0.1)'}} 
+                      formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Profit']}
+                    />
+                    <Legend wrapperStyle={{fontSize: "14px", paddingTop: '10px'}}/>
+                    <Bar dataKey="profit" fill="#f59e0b" name="Profit" radius={[4, 4, 0, 0]} />
                 </BarChart>
             </ResponsiveContainer>
-        </div>
-        <div className="lg:col-span-1">
-            <SalesInsight />
         </div>
       </div>
     </div>

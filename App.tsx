@@ -5,7 +5,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './DashboardPage';
 import SalesPage from './pages/SalesPage';
 import ProductsPage from './pages/ProductsPage';
-import { supabase } from './services/supabase';
+import UsersPage from './pages/UsersPage';
 
 interface AuthContextType {
   user: User | null;
@@ -53,7 +53,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 const Sidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
-    const { logout } = useAuth();
+    const { user, logout } = useAuth();
     const location = useLocation();
 
     const navItems = [
@@ -61,6 +61,10 @@ const Sidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
         { path: '/sales', label: 'Sales', icon: <ChartBarIcon /> },
         { path: '/products', label: 'Products', icon: <CubeIcon /> },
     ];
+    
+    const adminNavItems = user?.role === 'admin' ? [
+        { path: '/users', label: 'Users', icon: <UsersIcon /> },
+    ] : [];
 
     const NavLink: React.FC<{ path: string; label: string; icon: React.ReactNode }> = ({ path, label, icon }) => {
         const isActive = location.pathname === path;
@@ -88,6 +92,8 @@ const Sidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
             </div>
             <nav className="flex-1 p-4 space-y-2">
                 {navItems.map(item => <NavLink key={item.path} {...item} />)}
+                {adminNavItems.length > 0 && <hr className="border-gray-700 my-2" />}
+                {adminNavItems.map(item => <NavLink key={item.path} {...item} />)}
             </nav>
             <div className="p-4 border-t border-gray-800">
                 <button onClick={handleLogout} className="w-full flex items-center justify-center px-4 py-3 text-sm font-medium rounded-lg text-gray-300 hover:bg-red-500 hover:text-white transition-colors">
@@ -150,25 +156,6 @@ const ProtectedLayout: React.FC = () => {
 };
 
 const App = () => {
-  if (!supabase) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
-        <div className="w-full max-w-lg p-8 space-y-4 bg-gray-800 rounded-lg shadow-lg border border-gray-700 text-center">
-          <h1 className="text-3xl font-bold text-red-500">Configuration Error</h1>
-          <p className="text-gray-300">
-            Your Supabase environment variables are not set.
-          </p>
-          <p className="text-gray-400 text-sm mt-2">
-            The application cannot connect to the database. Please make sure to set the
-            <code className="bg-gray-700 p-1 rounded-md mx-1 font-mono">VITE_SUPABASE_URL</code> and
-            <code className="bg-gray-700 p-1 rounded-md mx-1 font-mono">VITE_SUPABASE_ANON_KEY</code>
-            environment variables in your project configuration.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <AuthProvider>
       <HashRouter>
@@ -181,6 +168,7 @@ const App = () => {
                     <Route index element={<DashboardPage />} />
                     <Route path="sales" element={<SalesPage />} />
                     <Route path="products" element={<ProductsPage />} />
+                    <Route path="users" element={<UsersPage />} />
                     <Route path="*" element={<Navigate to="/" />} />
                 </Route>
               </Routes>
@@ -198,5 +186,7 @@ const ChartBarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-
 const CubeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>;
 const LogoutIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>;
 const MenuIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>;
+const UsersIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197m0 0A5.975 5.975 0 0112 13a5.975 5.975 0 013 5.197M15 21a6 6 0 00-9-5.197" /></svg>;
+
 
 export default App;
