@@ -18,7 +18,8 @@ let mockSales: Sale[] = [
   { id: 's4', productId: '2', productName: 'Premium Coffee Beans (1kg)', quantity: 3, totalPrice: 135, date: new Date().toISOString() },
 ];
 
-const mockUser: User = { id: 'user1', email: 'manager@xo.com', name: 'Alex Doe' };
+const mockAdminUser: User = { id: 'user1', email: 'manager@xo.com', name: 'Alex Doe', role: 'admin' };
+const mockStaffUser: User = { id: 'user2', email: 'staff@xo.com', name: 'Jane Smith', role: 'sales_staff' };
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
@@ -26,8 +27,11 @@ const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 export const api = {
   signIn: async (email: string): Promise<User> => {
     await delay(500);
-    if (email.toLowerCase() === mockUser.email) {
-      return Promise.resolve(mockUser);
+    if (email.toLowerCase() === mockAdminUser.email) {
+      return Promise.resolve(mockAdminUser);
+    }
+    if (email.toLowerCase() === mockStaffUser.email) {
+      return Promise.resolve(mockStaffUser);
     }
     return Promise.reject(new Error('Invalid credentials'));
   },

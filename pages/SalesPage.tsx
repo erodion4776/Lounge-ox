@@ -121,7 +121,7 @@ const SalesPage: React.FC = () => {
                             <tr key={sale.id}>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{sale.productName}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{sale.quantity}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${sale.totalPrice.toFixed(2)}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{sale.totalPrice.toFixed(2)}</td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{new Date(sale.date).toLocaleString()}</td>
                             </tr>
                         ))}

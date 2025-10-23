@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Product } from '../types';
+import { useAuth } from '../App';
 
 const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCancel: () => void }> = ({ product, onSave, onCancel }) => {
     const [formData, setFormData] = useState<Partial<Product>>({ name: '', price: 0, stock: 0, cost: 0 });
@@ -62,6 +63,7 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
 };
 
 const ProductsPage: React.FC = () => {
+    const { user } = useAuth();
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -110,7 +112,9 @@ const ProductsPage: React.FC = () => {
                     <h1 className="text-3xl font-bold">Products</h1>
                     <p className="text-gray-400">Manage your inventory.</p>
                 </div>
-                <button onClick={handleAdd} className="bg-amber-500 text-gray-900 font-bold py-2 px-4 rounded-lg hover:bg-amber-600 transition-colors">Add Product</button>
+                {user?.role === 'admin' && (
+                    <button onClick={handleAdd} className="bg-amber-500 text-gray-900 font-bold py-2 px-4 rounded-lg hover:bg-amber-600 transition-colors">Add Product</button>
+                )}
             </div>
 
             {lowStockCount > 0 && (
@@ -129,22 +133,26 @@ const ProductsPage: React.FC = () => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Price</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Cost</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Stock</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                                {user?.role === 'admin' && (
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="bg-gray-800 divide-y divide-gray-700">
                             {loading ? (
-                                <tr><td colSpan={5} className="text-center py-4">Loading products...</td></tr>
+                                <tr><td colSpan={user?.role === 'admin' ? 5 : 4} className="text-center py-4">Loading products...</td></tr>
                             ) : products.map((product) => (
                                 <tr key={product.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{product.name}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${product.price.toFixed(2)}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">${product.cost.toFixed(2)}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.cost.toFixed(2)}</td>
                                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${product.stock < 10 ? 'text-red-400 font-bold' : 'text-gray-300'}`}>{product.stock}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                        <button onClick={() => handleEdit(product)} className="text-amber-400 hover:text-amber-300">Edit</button>
-                                        <button onClick={() => handleDelete(product.id)} className="text-red-500 hover:text-red-400">Delete</button>
-                                    </td>
+                                    {user?.role === 'admin' && (
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                            <button onClick={() => handleEdit(product)} className="text-amber-400 hover:text-amber-300">Edit</button>
+                                            <button onClick={() => handleDelete(product.id)} className="text-red-500 hover:text-red-400">Delete</button>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>
@@ -152,7 +160,7 @@ const ProductsPage: React.FC = () => {
                 </div>
             </div>
 
-            {isModalOpen && <ProductForm product={editingProduct} onSave={handleSave} onCancel={() => setIsModalOpen(false)} />}
+            {isModalOpen && user?.role === 'admin' && <ProductForm product={editingProduct} onSave={handleSave} onCancel={() => setIsModalOpen(false)} />}
         </div>
     );
 };

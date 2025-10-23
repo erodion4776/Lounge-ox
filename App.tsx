@@ -1,4 +1,3 @@
-
 import React, { useState, useContext, createContext, useMemo } from 'react';
 import { HashRouter, Routes, Route, Link, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { User } from './types';
@@ -52,7 +51,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
-const Sidebar: React.FC = () => {
+const Sidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
     const { logout } = useAuth();
     const location = useLocation();
 
@@ -65,23 +64,32 @@ const Sidebar: React.FC = () => {
     const NavLink: React.FC<{ path: string; label: string; icon: React.ReactNode }> = ({ path, label, icon }) => {
         const isActive = location.pathname === path;
         return (
-            <Link to={path} className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive ? 'bg-gray-700 text-amber-400' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}`}>
+            <Link to={path} onClick={onNavigate} className={`flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${isActive ? 'bg-gray-700 text-amber-400' : 'text-gray-300 hover:bg-gray-800 hover:text-white'}`}>
                 <span className="mr-3">{icon}</span>
                 {label}
             </Link>
         );
     };
+    
+    const handleLogout = () => {
+        logout();
+        if (onNavigate) {
+            onNavigate();
+        }
+    };
 
     return (
         <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col h-full">
-            <div className="flex items-center justify-center h-20 border-b border-gray-800">
-                <h1 className="text-2xl font-bold text-amber-400 tracking-wider">XO</h1>
+            <div className="flex items-center justify-center h-16 lg:h-20 border-b border-gray-800">
+                <Link to="/" onClick={onNavigate}>
+                    <h1 className="text-2xl font-bold text-amber-400 tracking-wider">XO</h1>
+                </Link>
             </div>
             <nav className="flex-1 p-4 space-y-2">
                 {navItems.map(item => <NavLink key={item.path} {...item} />)}
             </nav>
             <div className="p-4 border-t border-gray-800">
-                <button onClick={logout} className="w-full flex items-center justify-center px-4 py-3 text-sm font-medium rounded-lg text-gray-300 hover:bg-red-500 hover:text-white transition-colors">
+                <button onClick={handleLogout} className="w-full flex items-center justify-center px-4 py-3 text-sm font-medium rounded-lg text-gray-300 hover:bg-red-500 hover:text-white transition-colors">
                     <LogoutIcon />
                     <span className="ml-3">Logout</span>
                 </button>
@@ -91,14 +99,53 @@ const Sidebar: React.FC = () => {
 };
 
 const ProtectedLayout: React.FC = () => {
-  return (
-    <div className="flex h-screen bg-gray-900 text-gray-100">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto p-8">
-        <Outlet />
-      </main>
-    </div>
-  );
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+    return (
+      <div className="flex h-screen bg-gray-900 text-gray-100 overflow-hidden">
+        {/* Static sidebar for desktop */}
+        <div className="hidden lg:flex lg:flex-shrink-0">
+          <Sidebar />
+        </div>
+  
+        {/* Mobile sidebar */}
+        <div className={`fixed inset-y-0 left-0 z-40 w-64 transform transition-transform duration-300 ease-in-out lg:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <Sidebar onNavigate={() => setIsSidebarOpen(false)} />
+        </div>
+  
+        {/* Overlay for mobile */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-30 lg:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+            aria-hidden="true"
+          ></div>
+        )}
+  
+        <div className="flex flex-col flex-1 min-w-0">
+          {/* Mobile header */}
+          <div className="lg:hidden flex-shrink-0 flex h-16 bg-gray-900 border-b border-gray-800 items-center justify-between px-4">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="text-gray-400 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-amber-500 p-1 rounded-md"
+              aria-label="Open sidebar"
+            >
+              <span className="sr-only">Open sidebar</span>
+              <MenuIcon />
+            </button>
+            <Link to="/" className="flex items-center">
+                <h1 className="text-xl font-bold text-amber-400 tracking-wider">XO</h1>
+            </Link>
+            <div className="w-8"></div> {/* Spacer to balance the button */}
+          </div>
+  
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    );
 };
 
 const App = () => {
@@ -130,5 +177,6 @@ const HomeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-
 const ChartBarIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>;
 const CubeIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>;
 const LogoutIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>;
+const MenuIcon = () => <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>;
 
 export default App;
