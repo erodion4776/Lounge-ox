@@ -4,7 +4,6 @@ import { api } from '../services/api';
 import { User } from '../types';
 import { useAuth } from '../App';
 
-// UserForm Modal Component
 const UserForm: React.FC<{ user?: User | null; onSave: () => void; onCancel: () => void }> = ({ user, onSave, onCancel }) => {
     const [formData, setFormData] = useState<Partial<User> & { password?: string }>({ 
         name: '', 
@@ -18,7 +17,7 @@ const UserForm: React.FC<{ user?: User | null; onSave: () => void; onCancel: () 
 
     useEffect(() => {
         if (user) {
-            setFormData({ ...user, password: '' }); // Don't show existing password
+            setFormData({ ...user, password: '' });
         } else {
             setFormData({ name: '', email: '', role: 'sales_staff', password: '' });
         }
@@ -188,7 +187,6 @@ const UserForm: React.FC<{ user?: User | null; onSave: () => void; onCancel: () 
     );
 };
 
-// Main UsersPage Component
 const UsersPage: React.FC = () => {
     const { user: currentUser } = useAuth();
     const [users, setUsers] = useState<User[]>([]);
@@ -216,7 +214,6 @@ const UsersPage: React.FC = () => {
         }
     }, [currentUser]);
     
-    // Redirect if not admin
     if (currentUser?.role !== 'admin') {
       return <Navigate to="/" replace />;
     }
@@ -333,4 +330,29 @@ const UsersPage: React.FC = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                                         <button 
                                             onClick={() => handleEdit(user)} 
-                                            className="text-amber-
+                                            className="text-amber-400 hover:text-amber-300 transition-colors"
+                                        >
+                                            Edit
+                                        </button>
+                                        {user.id !== currentUser.id && (
+                                            <button 
+                                                onClick={() => handleDelete(user.id, user.email)} 
+                                                className="text-red-500 hover:text-red-400 transition-colors"
+                                            >
+                                                Delete
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {isModalOpen && <UserForm user={editingUser} onSave={handleSave} onCancel={() => setIsModalOpen(false)} />}
+        </div>
+    );
+};
+
+export default UsersPage;
