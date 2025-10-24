@@ -1,14 +1,7 @@
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
-   import React, { useState, useEffect } from 'react';
+    import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Product } from '../types';
 import { useAuth } from '../App';
-
-// NOTE: This version includes a placeholder for ProductModal and the correct logic for the
-// stock display which was causing the build error, along with the admin role-based visibility.
-
-// Placeholder for Add/Edit Modal (you'd replace this with your actual component)
-// For now, we'll just implement the core logic to prevent the build error.
 
 const ProductsPage: React.FC = () => {
     const { user } = useAuth();
@@ -19,7 +12,6 @@ const ProductsPage: React.FC = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     
-    // Admin action states (placeholders)
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [productToEdit, setProductToEdit] = useState<Product | null>(null);
 
@@ -39,21 +31,20 @@ const ProductsPage: React.FC = () => {
         fetchProducts();
     }, []);
 
-    // Placeholder functions for CRUD (assuming they exist in your full file)
     const handleAddProduct = () => {
-        if (!isAdmin) return; // Role check
+        if (!isAdmin) return;
         setProductToEdit(null);
         setIsModalOpen(true);
     };
 
     const handleEditProduct = (product: Product) => {
-        if (!isAdmin) return; // Role check
+        if (!isAdmin) return;
         setProductToEdit(product);
         setIsModalOpen(true);
     };
 
     const handleDeleteProduct = async (productId: string) => {
-        if (!isAdmin || !window.confirm('Are you sure you want to delete this product?')) return; // Role check
+        if (!isAdmin || !window.confirm('Are you sure you want to delete this product?')) return;
         try {
             await api.deleteProduct(productId);
             setSuccess('Product deleted successfully!');
@@ -117,14 +108,67 @@ const ProductsPage: React.FC = () => {
                                     <tr key={product.id} className="hover:bg-gray-700">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{product.name}</td>
                                         
-                                        {/* FIX: Robust Stock Cell (Line 172-174 in your log suggests this area) */}
+                                        {/* Stock Cell (with Out of Stock indicator - FIXED for build errors) */}
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 flex items-center">
                                             <span className="mr-2">{product.stock}</span>
                                             {product.stock === 0 && (
                                                 <span className="ml-2 px-2 py-1 text-xs bg-red-600 rounded-full">Out of Stock</span>
                                             )}
                                         </td>
-                                        {/* END FIX */}
+                                        
+                                        {/* Conditional Data Cell: Cost (Admin Only) */}
+                                        {isAdmin && (
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.cost.toFixed(2)}</td>
+                                        )}
+                                        
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
+                                        
+                                        {/* Conditional Data Cell: Profit/Unit (Admin Only) */}
+                                        {isAdmin && (
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{(product.price - product.cost).toFixed(2)}</td>
+                                        )}
+
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{(product.price * product.stock).toFixed(2)}</td>
+                                        
+                                        {/* Conditional Actions Cell: Edit/Delete (Admin Only) - FIXED for build errors */}
+                                        {isAdmin ? (
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                                <button
+                                                    onClick={() => handleEditProduct(product)}
+                                                    className="text-amber-400 hover:text-amber-500"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteProduct(product.id)}
+                                                    className="text-red-400 hover:text-red-500 ml-2"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </td>
+                                        ) : null}
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            {/* Placeholder for Modal component call */}
+            {/* {isModalOpen && (
+                <ProductModal 
+                    onClose={() => setIsModalOpen(false)} 
+                    onSave={() => { setIsModalOpen(false); fetchProducts(); }} 
+                    product={productToEdit} 
+                    isEdit={!!productToEdit} 
+                />
+            )} */}
+        </div>
+    );
+};
+
+export default ProductsPage;                                    {/* END FIX */}
 
                                         {/* Conditional Data Cell: Cost (Admin Only) */}
                                         {isAdmin && (
