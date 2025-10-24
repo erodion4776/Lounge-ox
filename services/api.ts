@@ -31,8 +31,6 @@ export const api = {
     };
   },
 
-  // Sign up removed - only admins can create users via saveUser()
-
   signOut: async (): Promise<void> => {
     const { error } = await supabase.auth.signOut();
     if (error) throw new Error(error.message);
@@ -209,7 +207,7 @@ export const api = {
       .from('sales')
       .select('*')
       .order('date', { ascending: false })
-      .limit(50); // Get last 50 sales
+      .limit(50);
 
     if (error) throw new Error(error.message);
 
@@ -224,11 +222,9 @@ export const api = {
   },
 
   logSale: async (productId: string, quantity: number): Promise<Sale> => {
-    // Get current user
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not authenticated');
 
-    // Get product details
     const { data: product, error: productError } = await supabase
       .from('products')
       .select('*')
@@ -238,12 +234,10 @@ export const api = {
     if (productError) throw new Error(productError.message);
     if (!product) throw new Error('Product not found');
 
-    // Check stock
     if (product.stock < quantity) {
       throw new Error(`Not enough stock. Available: ${product.stock}`);
     }
 
-    // Update stock
     const { error: updateError } = await supabase
       .from('products')
       .update({ stock: product.stock - quantity })
@@ -251,7 +245,6 @@ export const api = {
 
     if (updateError) throw new Error(updateError.message);
 
-    // Log sale
     const totalPrice = Number(product.price) * quantity;
     const { data: sale, error: saleError } = await supabase
       .from('sales')
@@ -278,6 +271,113 @@ export const api = {
     };
   },
 
+  updateSale: async (saleId: string, productId: string, quantity: number): Promise<Sale> => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { data: oldSale, error: oldSaleError } = await supabase
+      .from('sales')
+      .select('*')
+      .eq('id', saleId)
+      .single();
+
+    if (oldSaleError) throw new Error(oldSaleError.message);
+    if (!oldSale) throw new Error('Sale not found');
+
+    const { data: oldProduct, error: oldProductError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', oldSale.product_id)
+      .single();
+
+    if (oldProductError) throw new Error(oldProductError.message);
+    if (!oldProduct) throw new Error('Old product not found');
+
+    await supabase
+      .from('products')
+      .update({ stock: oldProduct.stock + oldSale.quantity })
+      .eq('id', oldSale.product_id);
+
+    const { data: newProduct, error: newProductError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', productId)
+      .single();
+
+    if (newProductError) throw new Error(newProductError.message);
+    if (!newProduct) throw new Error('Product not found');
+
+    if (newProduct.stock < quantity) {
+      await supabase
+        .from('products')
+        .update({ stock: oldProduct.stock })
+        .eq('id', oldSale.product_id);
+      throw new Error(`Not enough stock. Available: ${newProduct.stock}`);
+    }
+
+    await supabase
+      .from('products')
+      .update({ stock: newProduct.stock - quantity })
+      .eq('id', productId);
+
+    const totalPrice = Number(newProduct.price) * quantity;
+    const { data: updatedSale, error: updateError } = await supabase
+      .from('sales')
+      .update({
+        product_id: productId,
+        product_name: newProduct.name,
+        quantity,
+        total_price: totalPrice,
+      })
+      .eq('id', saleId)
+      .select()
+      .single();
+
+    if (updateError) throw new Error(updateError.message);
+    if (!updatedSale) throw new Error('Failed to update sale');
+
+    return {
+      id: updatedSale.id,
+      productId: updatedSale.product_id,
+      productName: updatedSale.product_name,
+      quantity: updatedSale.quantity,
+      totalPrice: Number(updatedSale.total_price),
+      date: updatedSale.date,
+    };
+  },
+
+  deleteSale: async (saleId: string): Promise<void> => {
+    const { data: sale, error: saleError } = await supabase
+      .from('sales')
+      .select('*')
+      .eq('id', saleId)
+      .single();
+
+    if (saleError) throw new Error(saleError.message);
+    if (!sale) throw new Error('Sale not found');
+
+    const { data: product, error: productError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('id', sale.product_id)
+      .single();
+
+    if (productError) throw new Error(productError.message);
+    if (!product) throw new Error('Product not found');
+
+    await supabase
+      .from('products')
+      .update({ stock: product.stock + sale.quantity })
+      .eq('id', sale.product_id);
+
+    const { error: deleteError } = await supabase
+      .from('sales')
+      .delete()
+      .eq('id', saleId);
+
+    if (deleteError) throw new Error(deleteError.message);
+  },
+
   // ============ USERS ============
 
   getUsers: async (): Promise<User[]> => {
@@ -298,7 +398,6 @@ export const api = {
 
   saveUser: async (user: Omit<User, 'id'> & { id?: string; password?: string }): Promise<User> => {
     if (user.id) {
-      // Update existing user
       const { data, error } = await supabase
         .from('users')
         .update({
@@ -313,7 +412,6 @@ export const api = {
       if (error) throw new Error(error.message);
       if (!data) throw new Error('Failed to update user');
 
-      // Update password if provided
       if (user.password) {
         const { error: passwordError } = await supabase.auth.admin.updateUserById(
           user.id,
@@ -329,19 +427,17 @@ export const api = {
         role: data.role,
       };
     } else {
-      // Create new user
       if (!user.password) throw new Error('Password is required for new users');
 
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: user.email,
         password: user.password,
-        email_confirm: true, // Auto-confirm email
+        email_confirm: true,
       });
 
       if (authError) throw new Error(authError.message);
       if (!authData.user) throw new Error('Failed to create user');
 
-      // Create user profile
       const { data: userData, error: userError } = await supabase
         .from('users')
         .insert({
@@ -354,7 +450,6 @@ export const api = {
         .single();
 
       if (userError) {
-        // Cleanup
         await supabase.auth.admin.deleteUser(authData.user.id);
         throw new Error(userError.message);
       }
@@ -371,7 +466,6 @@ export const api = {
   },
 
   deleteUser: async (userId: string): Promise<void> => {
-    // Delete from public.users first (will cascade)
     const { error: deleteError } = await supabase
       .from('users')
       .delete()
@@ -379,7 +473,6 @@ export const api = {
 
     if (deleteError) throw new Error(deleteError.message);
 
-    // Delete auth user
     const { error: authError } = await supabase.auth.admin.deleteUser(userId);
     if (authError) throw new Error(authError.message);
   },
