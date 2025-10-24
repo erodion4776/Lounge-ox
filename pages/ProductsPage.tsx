@@ -1,17 +1,18 @@
-      // Assuming the necessary imports and the useAuth hook from App.tsx are available
-import React, { useState, useEffect } from 'react';
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
+   import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Product } from '../types';
-import { useAuth } from '../App'; // <-- **NEW: Import useAuth**
+import { useAuth } from '../App';
 
-// Placeholder for Add/Edit Modal (if it exists in your full file)
-// const ProductModal: React.FC<any> = ({ onClose, onSave, product, isEdit }) => { /* ... */ };
+// NOTE: This version includes a placeholder for ProductModal and the correct logic for the
+// stock display which was causing the build error, along with the admin role-based visibility.
+
+// Placeholder for Add/Edit Modal (you'd replace this with your actual component)
+// For now, we'll just implement the core logic to prevent the build error.
 
 const ProductsPage: React.FC = () => {
-    // --- New: Get User Role ---
     const { user } = useAuth();
     const isAdmin = user?.role === 'admin';
-    // -------------------------
 
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(false);
@@ -62,8 +63,6 @@ const ProductsPage: React.FC = () => {
         }
     };
 
-    // Assuming the full file includes the ProductModal component and logic for saving/editing
-
     return (
         <div className="space-y-8">
             <div>
@@ -92,18 +91,17 @@ const ProductsPage: React.FC = () => {
                             <tr>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Product Name</th>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Stock</th>
-                                {/* --- Conditional Columns (Admin Only) --- */}
+                                {/* Conditional Columns (Admin Only) */}
                                 {isAdmin && (
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Cost</th>
                                 )}
-                                {/* --------------------------------------- */}
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Selling Price</th>
-                                {/* --- Conditional Columns (Admin Only) --- */}
+                                {/* Conditional Columns (Admin Only) */}
                                 {isAdmin && (
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profit/Unit</th>
                                 )}
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Total Value</th>
-                                {/* --- Conditional Actions Column (Admin Only) --- */}
+                                {/* Conditional Actions Column (Admin Only) */}
                                 {isAdmin && (
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
                                 )}
@@ -111,21 +109,76 @@ const ProductsPage: React.FC = () => {
                         </thead>
                         <tbody className="bg-gray-800 divide-y divide-gray-700">
                             {loading ? (
-                                <tr>
+                                <tr className="hover:bg-gray-700">
                                     <td colSpan={isAdmin ? 7 : 4} className="px-6 py-4 text-center text-gray-400">Loading products...</td>
                                 </tr>
                             ) : (
                                 products.map((product) => (
-                                    <tr key={product.id}>
+                                    <tr key={product.id} className="hover:bg-gray-700">
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{product.name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{product.stock}</td>
-                                        {/* --- Conditional Data Cell: Cost --- */}
+                                        
+                                        {/* FIX: Robust Stock Cell (Line 172-174 in your log suggests this area) */}
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 flex items-center">
+                                            <span className="mr-2">{product.stock}</span>
+                                            {product.stock === 0 && (
+                                                <span className="ml-2 px-2 py-1 text-xs bg-red-600 rounded-full">Out of Stock</span>
+                                            )}
+                                        </td>
+                                        {/* END FIX */}
+
+                                        {/* Conditional Data Cell: Cost (Admin Only) */}
                                         {isAdmin && (
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.cost.toFixed(2)}</td>
                                         )}
-                                        {/* ---------------------------------- */}
+                                        
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
-                                        {/* --- Conditional Data Cell: Profit/Unit --- */}
+                                        
+                                        {/* Conditional Data Cell: Profit/Unit (Admin Only) */}
+                                        {isAdmin && (
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{(product.price - product.cost).toFixed(2)}</td>
+                                        )}
+
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{(product.price * product.stock).toFixed(2)}</td>
+                                        
+                                        {/* Conditional Actions Cell: Edit/Delete (Admin Only) */}
+                                        {isAdmin && (
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                                                <button
+                                                    onClick={() => handleEditProduct(product)}
+                                                    className="text-amber-400 hover:text-amber-500"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteProduct(product.id)}
+                                                    className="text-red-400 hover:text-red-500 ml-2"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </td>
+                                        )}
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            {/* Placeholder for Modal component call */}
+            {/* {isModalOpen && (
+                <ProductModal 
+                    onClose={() => setIsModalOpen(false)} 
+                    onSave={() => { setIsModalOpen(false); fetchProducts(); }} 
+                    product={productToEdit} 
+                    isEdit={!!productToEdit} 
+                />
+            )} */}
+        </div>
+    );
+};
+
+export default ProductsPage;                                     {/* --- Conditional Data Cell: Profit/Unit --- */}
                                         {isAdmin && (
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{(product.price - product.cost).toFixed(2)}</td>
                                         )}
