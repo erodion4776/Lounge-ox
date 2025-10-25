@@ -34,23 +34,60 @@ export const api = {
   },
 
   getCurrentUser: async (): Promise<User | null> => {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return null;
+    try {
+      // Use getSession instead of getUser - it's more reliable
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      console.log('getCurrentUser - session check:', { 
+        hasSession: !!session, 
+        sessionError 
+      });
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        return null;
+      }
+      
+      if (!session?.user) {
+        console.log('No active session');
+        return null;
+      }
 
-    const { data: userData, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', authUser.id)
-      .single();
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
 
-    if (error || !userData) return null;
+      console.log('getCurrentUser - user query:', { 
+        userData, 
+        userError 
+      });
 
-    return {
-      id: userData.id,
-      email: userData.email,
-      name: userData.name,
-      role: userData.role,
-    };
+      if (userError) {
+        console.error('User query error:', userError);
+        // Check if it's a permissions error
+        if (userError.code === 'PGRST116') {
+          console.error('No rows found - user might not exist in users table');
+        }
+        return null;
+      }
+
+      if (!userData) {
+        console.error('No user data found');
+        return null;
+      }
+
+      return {
+        id: userData.id,
+        email: userData.email,
+        name: userData.name,
+        role: userData.role,
+      };
+    } catch (error) {
+      console.error('getCurrentUser unexpected error:', error);
+      return null;
+    }
   },
 
   getDashboardStats: async (): Promise<DashboardStats> => {
