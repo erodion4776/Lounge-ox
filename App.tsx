@@ -32,19 +32,51 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
   useEffect(() => {
     const initAuth = async () => {
+      console.log('1. Starting auth initialization...');
+      
       try {
+        // First check if we have a session
+        const { data: { session } } = await supabase.auth.getSession();
+        console.log('2. Session check:', { hasSession: !!session });
+        
+        if (!session) {
+          // No session = not logged in, this is OK
+          console.log('3. No session - user needs to login');
+          setLoading(false);
+          return;
+        }
+        
+        // We have a session, try to get user data
+        console.log('4. Session found, getting user data...');
         const currentUser = await api.getCurrentUser();
-        setUser(currentUser);
+        console.log('5. User data result:', currentUser);
+        
+        if (currentUser) {
+          setUser(currentUser);
+        } else {
+          // Session exists but no user in database - this is a problem
+          console.error('Session exists but no user in database!');
+          // Optionally sign them out to fix the inconsistency
+          await supabase.auth.signOut();
+        }
       } catch (error) {
-        console.error('Failed to get current user:', error);
+        console.error('Auth initialization error:', error);
       } finally {
+        console.log('6. Auth initialization complete');
         setLoading(false);
       }
     };
 
+    // Add timeout failsafe
+    const timeoutId = setTimeout(() => {
+      console.error('Auth timeout - forcing loading to stop');
+      setLoading(false);
+    }, 5000);
+
     initAuth();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state changed:', event);
       if (event === 'SIGNED_IN' && session) {
         try {
           const currentUser = await api.getCurrentUser();
@@ -58,6 +90,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     });
 
     return () => {
+      clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
