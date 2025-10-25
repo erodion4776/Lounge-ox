@@ -1,63 +1,116 @@
-const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { Toaster } from 'react-hot-toast';
 
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const currentUser = await api.getCurrentUser();
-        setUser(currentUser);
-      } catch (error) {
-        console.error('Failed to get current user:', error);
-        // Don't throw - just set user to null and continue
-        setUser(null);
-      } finally {
-        // Always set loading to false, even if there's an error
-        setLoading(false);
-      }
-    };
+// Import pages
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Leads from './pages/Leads';
+import Clients from './pages/Clients';
+import Appointments from './pages/Appointments';
+import Analytics from './pages/Analytics';
+import Profile from './pages/Profile';
+import Settings from './pages/Settings';
 
-    // Add a timeout to prevent infinite loading
-    const timeout = setTimeout(() => {
-      console.error('Auth initialization timeout');
-      setLoading(false);
-    }, 5000);
+// Import components
+import Layout from './components/Layout';
+import LoadingSpinner from './components/LoadingSpinner';
 
-    initAuth().finally(() => clearTimeout(timeout));
+// Protected Route wrapper component
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        try {
-          const currentUser = await api.getCurrentUser();
-          setUser(currentUser);
-        } catch (error) {
-          console.error('Failed to get user on sign in:', error);
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-      }
-    });
+  if (loading) {
+    return <LoadingSpinner fullScreen />;
+  }
 
-    return () => {
-      clearTimeout(timeout);
-      subscription.unsubscribe();
-    };
-  }, []);
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
-  const login = (newUser: User) => {
-    setUser(newUser);
-  };
-
-  const logout = async () => {
-    try {
-      await api.signOut();
-      setUser(null);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
-
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading]);
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <>{children}</>;
 };
+
+// Public Route wrapper component (redirects to dashboard if already logged in)
+const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <LoadingSpinner fullScreen />;
+  }
+
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+// Main App Component
+const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <Router>
+        <div className="min-h-screen bg-gray-50">
+          <Routes>
+            {/* Public Routes */}
+            <Route
+              path="/login"
+              element={
+                <PublicRoute>
+                  <Login />
+                </PublicRoute>
+              }
+            />
+
+            {/* Protected Routes with Layout */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <Layout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/leads" element={<Leads />} />
+              <Route path="/clients" element={<Clients />} />
+              <Route path="/appointments" element={<Appointments />} />
+              <Route path="/analytics" element={<Analytics />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/settings" element={<Settings />} />
+            </Route>
+
+            {/* Catch all - redirect to dashboard */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+
+          {/* Toast notifications */}
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: '#363636',
+                color: '#fff',
+              },
+              success: {
+                style: {
+                  background: '#10b981',
+                },
+              },
+              error: {
+                style: {
+                  background: '#ef4444',
+                },
+              },
+            }}
+          />
+        </div>
+      </Router>
+    </AuthProvider>
+  );
+};
+
+// THIS IS THE CRUCIAL DEFAULT EXPORT
+export default App;
