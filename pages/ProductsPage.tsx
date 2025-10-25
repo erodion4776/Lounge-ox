@@ -1,4 +1,4 @@
-   import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Product } from '../types';
 import { useAuth } from '../App';
@@ -48,9 +48,6 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
             setError('Stock must be a positive number');
             return false;
         }
-        if (formData.price && formData.cost && formData.price < formData.cost) {
-            setError('Warning: Price is lower than cost. You will not make a profit.');
-        }
         return true;
     };
 
@@ -64,7 +61,7 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
 
         setLoading(true);
         try {
-            await api.saveProduct(formData as any);
+            await api.saveProduct(formData as Product);
             onSave();
         } catch (err: any) {
             setError(err.message || 'Failed to save product');
@@ -114,7 +111,7 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
                                 placeholder="0.00"
                                 className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-gray-400" 
                             />
-                            <p className="mt-1 text-xs text-gray-400">Your purchase cost</p>
+                            <p className="mt-1 text-xs text-gray-400">Purchase cost</p>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-300 mb-1">
@@ -149,10 +146,9 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
                             placeholder="0"
                             className="w-full bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-amber-500 focus:border-amber-500 text-white placeholder-gray-400" 
                         />
-                        <p className="mt-1 text-xs text-gray-400">Current inventory count</p>
+                        <p className="mt-1 text-xs text-gray-400">Current inventory</p>
                     </div>
 
-                    {/* Profit Calculator - Admin Only */}
                     {isAdmin && formData.price !== undefined && formData.cost !== undefined && (
                         <div className="bg-gray-900 border border-gray-600 rounded-md p-4">
                             <h4 className="text-sm font-medium text-gray-300 mb-2">Profit Calculation</h4>
@@ -174,16 +170,8 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
                     )}
 
                     {error && (
-                        <div className={`p-3 border rounded-md ${
-                            error.includes('Warning') 
-                                ? 'bg-yellow-900 border-yellow-700' 
-                                : 'bg-red-900 border-red-700'
-                        }`}>
-                            <p className={`text-sm ${
-                                error.includes('Warning') 
-                                    ? 'text-yellow-200' 
-                                    : 'text-red-200'
-                            }`}>{error}</p>
+                        <div className="p-3 bg-red-900 border border-red-700 rounded-md">
+                            <p className="text-sm text-red-200">{error}</p>
                         </div>
                     )}
 
@@ -192,16 +180,16 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
                             type="button" 
                             onClick={onCancel} 
                             disabled={loading}
-                            className="py-2 px-4 rounded-md text-gray-300 bg-gray-600 hover:bg-gray-500 disabled:opacity-50 transition-colors"
+                            className="py-2 px-4 rounded-md text-gray-300 bg-gray-600 hover:bg-gray-500 disabled:opacity-50"
                         >
                             Cancel
                         </button>
                         <button 
                             type="submit" 
                             disabled={loading} 
-                            className="py-2 px-6 rounded-md text-gray-900 bg-amber-400 hover:bg-amber-500 disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors font-medium"
+                            className="py-2 px-6 rounded-md text-gray-900 bg-amber-400 hover:bg-amber-500 disabled:bg-gray-500"
                         >
-                            {loading ? 'Saving...' : product ? 'Update Product' : 'Add Product'}
+                            {loading ? 'Saving...' : product ? 'Update' : 'Add Product'}
                         </button>
                     </div>
                 </form>
@@ -248,13 +236,12 @@ const ProductsPage: React.FC = () => {
     };
 
     const handleDelete = async (productId: string, productName: string) => {
-        if (window.confirm(`Are you sure you want to delete "${productName}"?\n\nThis action cannot be undone.`)) {
-            setError('');
+        if (window.confirm(`Delete "${productName}"?`)) {
             try {
                 await api.deleteProduct(productId);
                 fetchProducts();
             } catch (err: any) {
-                setError(err.message || 'Failed to delete product');
+                setError(err.message || 'Failed to delete');
             }
         }
     };
@@ -278,22 +265,15 @@ const ProductsPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold">Products</h1>
-                    <p className="text-gray-400">Manage your inventory.</p>
+                    <p className="text-gray-400">Manage your inventory</p>
                 </div>
                 {isAdmin && (
-                    <button 
-                        onClick={handleAdd} 
-                        className="bg-amber-500 text-gray-900 font-bold py-2 px-4 rounded-lg hover:bg-amber-600 transition-colors flex items-center gap-2"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                        </svg>
+                    <button onClick={handleAdd} className="bg-amber-500 text-gray-900 font-bold py-2 px-4 rounded-lg hover:bg-amber-600">
                         Add Product
                     </button>
                 )}
             </div>
 
-            {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
                     <p className="text-sm text-gray-400">Total Products</p>
@@ -306,7 +286,7 @@ const ProductsPage: React.FC = () => {
                     </div>
                 )}
                 <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                    <p className="text-sm text-gray-400">Low Stock Items</p>
+                    <p className="text-sm text-gray-400">Low Stock</p>
                     <p className="text-2xl font-bold text-yellow-400">{lowStockCount}</p>
                 </div>
                 <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
@@ -315,190 +295,87 @@ const ProductsPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Search Bar */}
-            <div className="relative">
-                <input
-                    type="search"
-                    placeholder="Search products by name..."
-                    aria-label="Search products"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-gray-700 border border-gray-600 rounded-md p-3 pl-10 focus:ring-amber-500 focus:border-amber-500 placeholder-gray-400 text-white"
-                />
-                <svg 
-                    xmlns="http://www.w3.org/2000/svg" 
-                    className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" 
-                    fill="none" 
-                    viewBox="0 0 24 24" 
-                    stroke="currentColor"
-                >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-            </div>
+            <input
+                type="search"
+                placeholder="Search products..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded-md p-3 text-white"
+            />
 
-            {/* Alerts */}
             {error && (
-                <div className="bg-red-900 border border-red-700 text-red-100 p-4 rounded-md" role="alert">
-                    <p className="font-medium">Error</p>
-                    <p>{error}</p>
+                <div className="bg-red-900 border border-red-700 p-4 rounded-md">
+                    <p className="text-red-200">{error}</p>
                 </div>
             )}
 
             {lowStockCount > 0 && (
-                <div className="bg-yellow-900 border-l-4 border-yellow-500 text-yellow-100 p-4 rounded-md" role="alert">
-                    <div className="flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <div>
-                            <p className="font-bold">Low Stock Alert</p>
-                            <p>You have {lowStockCount} item(s) running low on stock (less than 10 units).</p>
-                        </div>
-                    </div>
+                <div className="bg-yellow-900 border-l-4 border-yellow-500 p-4 rounded-md">
+                    <p className="font-bold text-yellow-100">Low Stock Alert</p>
+                    <p className="text-yellow-100">{lowStockCount} items below 10 units</p>
                 </div>
             )}
             
-            {/* Products Table */}
             <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-700">
                         <thead className="bg-gray-800">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
-                                {isAdmin && (
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Cost</th>
-                                )}
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Price</th>
-                                {isAdmin && (
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profit</th>
-                                )}
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Stock</th>
-                                {isAdmin && (
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
-                                )}
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Name</th>
+                                {isAdmin && <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Cost</th>}
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Price</th>
+                                {isAdmin && <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Profit</th>}
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Stock</th>
+                                {isAdmin && <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="bg-gray-800 divide-y divide-gray-700">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={isAdmin ? 6 : 3} className="text-center py-8">
-                                        <div className="flex flex-col items-center justify-center">
-                                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-400 mb-2"></div>
-                                            <p className="text-gray-400">Loading products...</p>
-                                        </div>
-                                    </td>
+                                    <td colSpan={isAdmin ? 6 : 3} className="text-center py-8 text-gray-400">Loading...</td>
                                 </tr>
                             ) : filteredProducts.length === 0 ? (
                                 <tr>
-                                    <td colSpan={isAdmin ? 6 : 3} className="text-center py-8">
-                                        <p className="text-gray-400">
-                                            {searchTerm ? `No products found matching "${searchTerm}"` : 'No products available. Add your first product!'}
-                                        </p>
+                                    <td colSpan={isAdmin ? 6 : 3} className="text-center py-8 text-gray-400">
+                                        {searchTerm ? 'No products found' : 'No products yet'}
                                     </td>
                                 </tr>
-                            ) : filteredProducts.map((product) => {
-                                const profit = product.price - product.cost;
-                                return (
-                                    <tr key={product.id} className={product.stock === 0 ? 'bg-red-900 bg-opacity-20' : ''}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
-                                            {product.name}
-                                            {product.stock === 0 && (
-                                                <span className="ml-2 px-2 py-1 text-xs bg-red-600 rounded-full">Out of Stock</span>
+                            ) : (
+                                filteredProducts.map((product) => {
+                                    const profit = product.price - product.cost;
+                                    return (
+                                        <tr key={product.id}>
+                                            <td className="px-6 py-4 text-sm font-medium text-white">
+                                                {product.name}
+                                                {product.stock === 0 && <span className="ml-2 px-2 py-1 text-xs bg-red-600 rounded-full">Out</span>}
+                                            </td>
+                                            {isAdmin && <td className="px-6 py-4 text-sm text-gray-300">₦{product.cost.toFixed(2)}</td>}
+                                            <td className="px-6 py-4 text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
+                                            {isAdmin && (
+                                                <td className={`px-6 py-4 text-sm font-medium ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                    ₦{profit.toFixed(2)}
+                                                </td>
                                             )}
-                                        </td>
-                                        {isAdmin && (
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.cost.toFixed(2)}</td>
-                                        )}
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
-                                        {isAdmin && (
-                                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                                ₦{profit.toFixed(2)}
+                                            <td className={`px-6 py-4 text-sm font-medium ${product.stock === 0 ? 'text-red-400' : product.stock < 10 ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                                {product.stock}
                                             </td>
-                                        )}
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
-                                            product.stock === 0 ? 'text-red-400' : product.stock < 10 ? 'text-yellow-400' : 'text-gray-300'
-                                        }`}>
-                                            {product.stock}
-                                        </td>
-                                        {isAdmin && (
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                                <button 
-                                                    onClick={() => handleEdit(product)} 
-                                                    className="text-amber-400 hover:text-amber-300 transition-colors"
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDelete(product.id, product.name)} 
-                                                    className="text-red-500 hover:text-red-400 transition-colors"
-                                                >
-                                                    Delete
-                                                </button>
-                                            </td>
-                                        )}
-                                    </tr>
-                                );
-                            })}
+                                            {isAdmin && (
+                                                <td className="px-6 py-4 text-right text-sm space-x-2">
+                                                    <button onClick={() => handleEdit(product)} className="text-amber-400 hover:text-amber-300">Edit</button>
+                                                    <button onClick={() => handleDelete(product.id, product.name)} className="text-red-500 hover:text-red-400">Delete</button>
+                                                </td>
+                                            )}
+                                        </tr>
+                                    );
+                                })
+                            )}
                         </tbody>
                     </table>
                 </div>
             </div>
 
             {isModalOpen && isAdmin && (
-                <ProductForm 
-                    product={editingProduct} 
-                    onSave={handleSave} 
-                    onCancel={() => setIsModalOpen(false)} 
-                />
-            )}
-        </div>
-    );
-};
-
-export default ProductsPage;                                         {product.stock === 0 && (
-                                                <span className="ml-2 px-2 py-1 text-xs bg-red-600 rounded-full">Out of Stock</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.cost.toFixed(2)}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            ₦{profit.toFixed(2)}
-                                        </td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
-                                            product.stock === 0 ? 'text-red-400' : product.stock < 10 ? 'text-yellow-400' : 'text-gray-300'
-                                        }`}>
-                                            {product.stock}
-                                        </td>
-                                        {user?.role === 'admin' && (
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                                                <button 
-                                                    onClick={() => handleEdit(product)} 
-                                                    className="text-amber-400 hover:text-amber-300 transition-colors"
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDelete(product.id, product.name)} 
-                                                    className="text-red-500 hover:text-red-400 transition-colors"
-                                                >
-                                                    Delete
-                                                </button>
-                                            </td>
-                                        )}
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            {isModalOpen && user?.role === 'admin' && (
-                <ProductForm 
-                    product={editingProduct} 
-                    onSave={handleSave} 
-                    onCancel={() => setIsModalOpen(false)} 
-                />
+                <ProductForm product={editingProduct} onSave={handleSave} onCancel={() => setIsModalOpen(false)} />
             )}
         </div>
     );
