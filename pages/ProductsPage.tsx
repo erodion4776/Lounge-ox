@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+   import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Product } from '../types';
 import { useAuth } from '../App';
 
 const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCancel: () => void }> = ({ product, onSave, onCancel }) => {
+    const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
     const [formData, setFormData] = useState<Partial<Product>>({ 
         name: '', 
         price: 0, 
@@ -48,7 +50,6 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
         }
         if (formData.price && formData.cost && formData.price < formData.cost) {
             setError('Warning: Price is lower than cost. You will not make a profit.');
-            // Don't return false - allow user to proceed with warning
         }
         return true;
     };
@@ -151,8 +152,8 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
                         <p className="mt-1 text-xs text-gray-400">Current inventory count</p>
                     </div>
 
-                    {/* Profit Calculator */}
-                    {formData.price !== undefined && formData.cost !== undefined && (
+                    {/* Profit Calculator - Admin Only */}
+                    {isAdmin && formData.price !== undefined && formData.cost !== undefined && (
                         <div className="bg-gray-900 border border-gray-600 rounded-md p-4">
                             <h4 className="text-sm font-medium text-gray-300 mb-2">Profit Calculation</h4>
                             <div className="space-y-1 text-sm">
@@ -211,6 +212,7 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
 
 const ProductsPage: React.FC = () => {
     const { user } = useAuth();
+    const isAdmin = user?.role === 'admin';
     const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -278,7 +280,7 @@ const ProductsPage: React.FC = () => {
                     <h1 className="text-3xl font-bold">Products</h1>
                     <p className="text-gray-400">Manage your inventory.</p>
                 </div>
-                {user?.role === 'admin' && (
+                {isAdmin && (
                     <button 
                         onClick={handleAdd} 
                         className="bg-amber-500 text-gray-900 font-bold py-2 px-4 rounded-lg hover:bg-amber-600 transition-colors flex items-center gap-2"
@@ -297,10 +299,12 @@ const ProductsPage: React.FC = () => {
                     <p className="text-sm text-gray-400">Total Products</p>
                     <p className="text-2xl font-bold text-white">{products.length}</p>
                 </div>
-                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
-                    <p className="text-sm text-gray-400">Inventory Value</p>
-                    <p className="text-2xl font-bold text-green-400">₦{totalValue.toLocaleString()}</p>
-                </div>
+                {isAdmin && (
+                    <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                        <p className="text-sm text-gray-400">Inventory Value</p>
+                        <p className="text-2xl font-bold text-green-400">₦{totalValue.toLocaleString()}</p>
+                    </div>
+                )}
                 <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
                     <p className="text-sm text-gray-400">Low Stock Items</p>
                     <p className="text-2xl font-bold text-yellow-400">{lowStockCount}</p>
@@ -361,11 +365,15 @@ const ProductsPage: React.FC = () => {
                         <thead className="bg-gray-800">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Cost</th>
+                                {isAdmin && (
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Cost</th>
+                                )}
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Price</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profit</th>
+                                {isAdmin && (
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profit</th>
+                                )}
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Stock</th>
-                                {user?.role === 'admin' && (
+                                {isAdmin && (
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
                                 )}
                             </tr>
@@ -373,7 +381,7 @@ const ProductsPage: React.FC = () => {
                         <tbody className="bg-gray-800 divide-y divide-gray-700">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={user?.role === 'admin' ? 6 : 5} className="text-center py-8">
+                                    <td colSpan={isAdmin ? 6 : 3} className="text-center py-8">
                                         <div className="flex flex-col items-center justify-center">
                                             <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-400 mb-2"></div>
                                             <p className="text-gray-400">Loading products...</p>
@@ -382,7 +390,7 @@ const ProductsPage: React.FC = () => {
                                 </tr>
                             ) : filteredProducts.length === 0 ? (
                                 <tr>
-                                    <td colSpan={user?.role === 'admin' ? 6 : 5} className="text-center py-8">
+                                    <td colSpan={isAdmin ? 6 : 3} className="text-center py-8">
                                         <p className="text-gray-400">
                                             {searchTerm ? `No products found matching "${searchTerm}"` : 'No products available. Add your first product!'}
                                         </p>
@@ -395,6 +403,59 @@ const ProductsPage: React.FC = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
                                             {product.name}
                                             {product.stock === 0 && (
+                                                <span className="ml-2 px-2 py-1 text-xs bg-red-600 rounded-full">Out of Stock</span>
+                                            )}
+                                        </td>
+                                        {isAdmin && (
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.cost.toFixed(2)}</td>
+                                        )}
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
+                                        {isAdmin && (
+                                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                ₦{profit.toFixed(2)}
+                                            </td>
+                                        )}
+                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
+                                            product.stock === 0 ? 'text-red-400' : product.stock < 10 ? 'text-yellow-400' : 'text-gray-300'
+                                        }`}>
+                                            {product.stock}
+                                        </td>
+                                        {isAdmin && (
+                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                                                <button 
+                                                    onClick={() => handleEdit(product)} 
+                                                    className="text-amber-400 hover:text-amber-300 transition-colors"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleDelete(product.id, product.name)} 
+                                                    className="text-red-500 hover:text-red-400 transition-colors"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </td>
+                                        )}
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {isModalOpen && isAdmin && (
+                <ProductForm 
+                    product={editingProduct} 
+                    onSave={handleSave} 
+                    onCancel={() => setIsModalOpen(false)} 
+                />
+            )}
+        </div>
+    );
+};
+
+export default ProductsPage;                                         {product.stock === 0 && (
                                                 <span className="ml-2 px-2 py-1 text-xs bg-red-600 rounded-full">Out of Stock</span>
                                             )}
                                         </td>
