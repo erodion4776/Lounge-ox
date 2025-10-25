@@ -1,26 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Debug: Log what we're getting from environment
-console.log('🔍 Environment Check:');
-console.log('VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL);
-console.log('Has VITE_SUPABASE_ANON_KEY:', !!import.meta.env.VITE_SUPABASE_ANON_KEY);
-console.log('Key length:', import.meta.env.VITE_SUPABASE_ANON_KEY?.length);
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Hardcoded for mobile development
+// TODO: Move to environment variables in production
+const supabaseUrl = 'https://gqcrhmncphjmkzdcnysc.supabase.co';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxY3JobW5jcGhqbWt6ZGNueXNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjEyNDkzODYsImV4cCI6MjA3NjgyNTM4Nn0.ZKNeghNJtjp09NywrsKtHxxskqJ31W9oRLX5Bk6NdHw';
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ Missing Supabase environment variables!');
-  console.error('URL present:', !!supabaseUrl);
-  console.error('Key present:', !!supabaseAnonKey);
-  throw new Error('Missing Supabase environment variables. Check your .env.local file.');
+  throw new Error('Supabase configuration is missing');
 }
-
-console.log('✅ Supabase configuration loaded successfully');
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    storage: window.localStorage,
   },
 });
