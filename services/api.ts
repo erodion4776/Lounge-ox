@@ -2,6 +2,8 @@ import { supabase } from './supabase';
 import { User, Product, Sale, DashboardStats } from '../types';
 
 export const api = {
+  // ============ AUTHENTICATION ============
+  
   signIn: async (email: string, password: string): Promise<User> => {
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
@@ -11,6 +13,7 @@ export const api = {
     if (authError) throw new Error(authError.message);
     if (!authData.user) throw new Error('No user data returned');
 
+    // Get user profile from public.users table
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('*')
@@ -34,63 +37,29 @@ export const api = {
   },
 
   getCurrentUser: async (): Promise<User | null> => {
-    try {
-      // Use getSession instead of getUser - it's more reliable
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      console.log('getCurrentUser - session check:', { 
-        hasSession: !!session, 
-        sessionError 
-      });
-      
-      if (sessionError) {
-        console.error('Session error:', sessionError);
-        return null;
-      }
-      
-      if (!session?.user) {
-        console.log('No active session');
-        return null;
-      }
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) return null;
 
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
+    const { data: userData, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
 
-      console.log('getCurrentUser - user query:', { 
-        userData, 
-        userError 
-      });
+    if (error || !userData) return null;
 
-      if (userError) {
-        console.error('User query error:', userError);
-        // Check if it's a permissions error
-        if (userError.code === 'PGRST116') {
-          console.error('No rows found - user might not exist in users table');
-        }
-        return null;
-      }
-
-      if (!userData) {
-        console.error('No user data found');
-        return null;
-      }
-
-      return {
-        id: userData.id,
-        email: userData.email,
-        name: userData.name,
-        role: userData.role,
-      };
-    } catch (error) {
-      console.error('getCurrentUser unexpected error:', error);
-      return null;
-    }
+    return {
+      id: userData.id,
+      email: userData.email,
+      name: userData.name,
+      role: userData.role,
+    };
   },
 
+  // ============ DASHBOARD ============
+
   getDashboardStats: async (): Promise<DashboardStats> => {
+    // Get all sales
     const { data: sales, error: salesError } = await supabase
       .from('sales')
       .select('*')
@@ -98,26 +67,33 @@ export const api = {
 
     if (salesError) throw new Error(salesError.message);
 
+    // Get all products
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('*');
 
     if (productsError) throw new Error(productsError.message);
 
+    // Calculate stats
     const totalRevenue = sales?.reduce((sum, sale) => sum + Number(sale.total_price), 0) || 0;
 
+    // Create a map for quick product lookup
     const productsMap = new Map(products?.map(p => [p.id, p]) || []);
     
+    // Calculate total profit
     const totalProfit = sales?.reduce((sum, sale) => {
       const product = productsMap.get(sale.product_id);
       return product ? sum + (Number(sale.total_price) - (Number(product.cost) * sale.quantity)) : sum;
     }, 0) || 0;
 
+    // Sales today
     const today = new Date().toISOString().split('T')[0];
     const salesToday = sales?.filter(s => s.date.startsWith(today)).length || 0;
 
+    // Low stock items (less than 10)
     const lowStockItems = products?.filter(p => p.stock < 10).length || 0;
 
+    // Sales by day for last 7 days
     const salesByDay: { [key: string]: number } = {};
     sales?.forEach(sale => {
       const day = new Date(sale.date).toLocaleDateString('en-US', { weekday: 'short' });
@@ -145,6 +121,8 @@ export const api = {
     };
   },
 
+  // ============ PRODUCTS ============
+
   getProducts: async (): Promise<Product[]> => {
     const { data, error } = await supabase
       .from('products')
@@ -164,6 +142,7 @@ export const api = {
 
   saveProduct: async (product: Omit<Product, 'id'> & { id?: string }): Promise<Product> => {
     if (product.id) {
+      // Update existing product
       const { data, error } = await supabase
         .from('products')
         .update({
@@ -187,6 +166,7 @@ export const api = {
         stock: data.stock,
       };
     } else {
+      // Create new product
       const { data, error } = await supabase
         .from('products')
         .insert({
@@ -219,6 +199,8 @@ export const api = {
 
     if (error) throw new Error(error.message);
   },
+
+  // ============ SALES ============
 
   getSales: async (): Promise<Sale[]> => {
     const { data, error } = await supabase
@@ -396,6 +378,8 @@ export const api = {
     if (deleteError) throw new Error(deleteError.message);
   },
 
+  // ============ USERS ============
+
   getUsers: async (): Promise<User[]> => {
     const { data, error } = await supabase
       .from('users')
@@ -429,9 +413,10 @@ export const api = {
       if (!data) throw new Error('Failed to update user');
 
       if (user.password) {
-        const { error: passwordError } = await supabase.auth.updateUser({
-          password: user.password
-        });
+        const { error: passwordError } = await supabase.auth.admin.updateUserById(
+          user.id,
+          { password: user.password }
+        );
         if (passwordError) throw new Error(passwordError.message);
       }
 
@@ -444,16 +429,10 @@ export const api = {
     } else {
       if (!user.password) throw new Error('Password is required for new users');
 
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: user.email,
         password: user.password,
-        options: {
-          emailRedirectTo: undefined,
-          data: {
-            name: user.name,
-            role: user.role
-          }
-        }
+        email_confirm: true,
       });
 
       if (authError) throw new Error(authError.message);
@@ -471,6 +450,7 @@ export const api = {
         .single();
 
       if (userError) {
+        await supabase.auth.admin.deleteUser(authData.user.id);
         throw new Error(userError.message);
       }
 
@@ -492,5 +472,8 @@ export const api = {
       .eq('id', userId);
 
     if (deleteError) throw new Error(deleteError.message);
+
+    const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+    if (authError) throw new Error(authError.message);
   },
 };
