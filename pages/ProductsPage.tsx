@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Product } from '../types';
-import { useAuth } from '../App';
+import { useAuth } from '../contexts/AuthContext';
 
 const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCancel: () => void }> = ({ product, onSave, onCancel }) => {
     const [formData, setFormData] = useState<Partial<Product>>({ 
@@ -271,6 +271,8 @@ const ProductsPage: React.FC = () => {
         product.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    const isAdmin = user?.role === 'admin';
+
     return (
         <div className="space-y-8">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -278,7 +280,7 @@ const ProductsPage: React.FC = () => {
                     <h1 className="text-3xl font-bold">Products</h1>
                     <p className="text-gray-400">Manage your inventory.</p>
                 </div>
-                {user?.role === 'admin' && (
+                {isAdmin && (
                     <button 
                         onClick={handleAdd} 
                         className="bg-amber-500 text-gray-900 font-bold py-2 px-4 rounded-lg hover:bg-amber-600 transition-colors flex items-center gap-2"
@@ -361,11 +363,15 @@ const ProductsPage: React.FC = () => {
                         <thead className="bg-gray-800">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Cost</th>
+                                {isAdmin && (
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Cost</th>
+                                )}
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Price</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profit</th>
+                                {isAdmin && (
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Profit</th>
+                                )}
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Stock</th>
-                                {user?.role === 'admin' && (
+                                {isAdmin && (
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
                                 )}
                             </tr>
@@ -373,7 +379,7 @@ const ProductsPage: React.FC = () => {
                         <tbody className="bg-gray-800 divide-y divide-gray-700">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={user?.role === 'admin' ? 6 : 5} className="text-center py-8">
+                                    <td colSpan={isAdmin ? 6 : 3} className="text-center py-8">
                                         <div className="flex flex-col items-center justify-center">
                                             <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-400 mb-2"></div>
                                             <p className="text-gray-400">Loading products...</p>
@@ -382,7 +388,7 @@ const ProductsPage: React.FC = () => {
                                 </tr>
                             ) : filteredProducts.length === 0 ? (
                                 <tr>
-                                    <td colSpan={user?.role === 'admin' ? 6 : 5} className="text-center py-8">
+                                    <td colSpan={isAdmin ? 6 : 3} className="text-center py-8">
                                         <p className="text-gray-400">
                                             {searchTerm ? `No products found matching "${searchTerm}"` : 'No products available. Add your first product!'}
                                         </p>
@@ -398,17 +404,21 @@ const ProductsPage: React.FC = () => {
                                                 <span className="ml-2 px-2 py-1 text-xs bg-red-600 rounded-full">Out of Stock</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.cost.toFixed(2)}</td>
+                                        {isAdmin && (
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.cost.toFixed(2)}</td>
+                                        )}
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">₦{product.price.toFixed(2)}</td>
-                                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                            ₦{profit.toFixed(2)}
-                                        </td>
+                                        {isAdmin && (
+                                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                ₦{profit.toFixed(2)}
+                                            </td>
+                                        )}
                                         <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
                                             product.stock === 0 ? 'text-red-400' : product.stock < 10 ? 'text-yellow-400' : 'text-gray-300'
                                         }`}>
                                             {product.stock}
                                         </td>
-                                        {user?.role === 'admin' && (
+                                        {isAdmin && (
                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                                                 <button 
                                                     onClick={() => handleEdit(product)} 
@@ -432,7 +442,7 @@ const ProductsPage: React.FC = () => {
                 </div>
             </div>
 
-            {isModalOpen && user?.role === 'admin' && (
+            {isModalOpen && isAdmin && (
                 <ProductForm 
                     product={editingProduct} 
                     onSave={handleSave} 
