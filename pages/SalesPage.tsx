@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { Product, Sale } from '../types';
-import { useAuth } from '../App';
+import { useAuth } from '../contexts/AuthContext';
 
 // Edit Sale Modal Component
 const EditSaleModal: React.FC<{ sale: Sale; products: Product[]; onSave: () => void; onCancel: () => void }> = ({ sale, products, onSave, onCancel }) => {
