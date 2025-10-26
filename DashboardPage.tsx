@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { api } from './services/api';
-import { useAuth } from './contexts/AuthContext';
+import { useAuth } from './App';
 import { DashboardStats } from './types';
 
 const StatCard: React.FC<{ title: string; value: string; icon: React.ReactNode }> = ({ title, value, icon }) => (
@@ -18,7 +18,6 @@ const DashboardPage: React.FC = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -35,98 +34,46 @@ const DashboardPage: React.FC = () => {
   }, []);
   
   if (loading || !stats) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-400 mb-4"></div>
-          <p className="text-gray-400">Loading dashboard...</p>
-        </div>
-      </div>
-    );
+    return <div className="text-center p-10">Loading dashboard...</div>;
   }
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold">Welcome, {user?.name}!</h1>
-        <p className="text-gray-400">
-          {isAdmin ? "Here's a summary of your business performance." : "Here's today's sales overview."}
-        </p>
+        <p className="text-gray-400">Here's a summary of your business performance.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Revenue - Admin Only */}
-        {isAdmin && (
-          <StatCard 
-            title="Total Revenue" 
-            value={`₦${stats.totalRevenue.toLocaleString()}`} 
-            icon={<MoneyIcon />} 
-          />
+        <StatCard title="Total Revenue" value={`₦${stats.totalRevenue.toLocaleString()}`} icon={<MoneyIcon />} />
+        {user?.role === 'admin' && (
+          <StatCard title="Total Profit" value={`₦${stats.totalProfit.toLocaleString()}`} icon={<TrendingUpIcon />} />
         )}
-        
-        {/* Profit - Admin Only */}
-        {isAdmin && (
-          <StatCard 
-            title="Total Profit" 
-            value={`₦${stats.totalProfit.toLocaleString()}`} 
-            icon={<TrendingUpIcon />} 
-          />
-        )}
-        
-        {/* Sales Today - Everyone */}
-        <StatCard 
-          title="Sales Today" 
-          value={stats.salesToday.toString()} 
-          icon={<ShoppingCartIcon />} 
-        />
-        
-        {/* Low Stock - Everyone */}
-        <StatCard 
-          title="Low Stock Items" 
-          value={stats.lowStockItems.toString()} 
-          icon={<ExclamationIcon />} 
-        />
+        <StatCard title="Sales Today" value={stats.salesToday.toString()} icon={<ShoppingCartIcon />} />
+        <StatCard title="Low Stock Items" value={stats.lowStockItems.toString()} icon={<ExclamationIcon />} />
       </div>
 
-      {/* Profit Chart - Admin Only */}
-      {isAdmin && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-3 bg-gray-800 p-6 rounded-lg border border-gray-700">
-            <h3 className="text-lg font-semibold text-amber-400 mb-4">Weekly Profit</h3>
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={stats.salesByDay} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#4a5568" />
-                <XAxis dataKey="day" stroke="#a0aec0" fontSize={12} />
-                <YAxis stroke="#a0aec0" fontSize={12} tickFormatter={(value) => `₦${Math.round(value / 1000)}k`} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#2d3748', border: '1px solid #4a5568', borderRadius: '0.5rem' }} 
-                  cursor={{fill: 'rgba(245, 158, 11, 0.1)'}} 
-                  formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Profit']}
-                />
-                <Legend wrapperStyle={{fontSize: "14px", paddingTop: '10px'}}/>
-                <Bar dataKey="profit" fill="#f59e0b" name="Profit" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* Staff Message - Show when not admin */}
-      {!isAdmin && (
-        <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-900 p-3 rounded-full">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {user?.role === 'admin' && (
+            <div className="lg:col-span-3 bg-gray-800 p-6 rounded-lg border border-gray-700">
+                <h3 className="text-lg font-semibold text-amber-400 mb-4">Weekly Profit</h3>
+                <ResponsiveContainer width="100%" height={350}>
+                    <BarChart data={stats.salesByDay} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#4a5568" />
+                        <XAxis dataKey="day" stroke="#a0aec0" fontSize={12} />
+                        <YAxis stroke="#a0aec0" fontSize={12} tickFormatter={(value) => `₦${Math.round(value / 1000)}k`} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#2d3748', border: '1px solid #4a5568', borderRadius: '0.5rem' }} 
+                          cursor={{fill: 'rgba(245, 158, 11, 0.1)'}} 
+                          formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Profit']}
+                        />
+                        <Legend wrapperStyle={{fontSize: "14px", paddingTop: '10px'}}/>
+                        <Bar dataKey="profit" fill="#f59e0b" name="Profit" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                </ResponsiveContainer>
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-white">Staff View</h3>
-              <p className="text-gray-400">You can log sales and view products. Contact your administrator for profit reports.</p>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

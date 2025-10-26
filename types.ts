@@ -30,3 +30,10 @@ export interface DashboardStats {
   lowStockItems: number;
   salesByDay: { day: string; profit: number }[];
 }
+
+export interface SalesSummary {
+  daily: { sales: number; profit: number };
+  weekly: { sales: number; profit: number };
+  monthly: { sales: number; profit: number };
+  yearly: { sales: number; profit: number };
+}

@@ -1,506 +1,282 @@
+import { User, Product, Sale, DashboardStats, SalesSummary } from '../types';
 import { supabase } from './supabase';
-import { User, Product, Sale, DashboardStats } from '../types';
+
+const simulateDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const api = {
-  // ============ AUTHENTICATION ============
-  
-  signIn: async (email: string, password: string): Promise<User> => {
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+  async signIn(email: string, password: string): Promise<User> {
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    if (error || !data.user) throw new Error(error?.message || 'Invalid credentials');
 
-    if (authError) throw new Error(authError.message);
-    if (!authData.user) throw new Error('No user data returned');
-
-    // Get user profile from public.users table
+    // Fetch user profile from public `users` table
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('*')
-      .eq('id', authData.user.id)
+      .eq('id', data.user.id)
       .single();
-
-    if (userError) throw new Error(userError.message);
-    if (!userData) throw new Error('User profile not found');
-
-    return {
-      id: userData.id,
-      email: userData.email,
-      name: userData.name,
-      role: userData.role,
-    };
-  },
-
-  // Sign up removed - only admins can create users via saveUser()
-
-  signOut: async (): Promise<void> => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw new Error(error.message);
-  },
-
-  getCurrentUser: async (): Promise<User | null> => {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return null;
-
-    const { data: userData, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', authUser.id)
-      .single();
-
-    if (error || !userData) return null;
-
-    return {
-      id: userData.id,
-      email: userData.email,
-      name: userData.name,
-      role: userData.role,
-    };
-  },
-
-  // ============ DASHBOARD ============
-
-  getDashboardStats: async (): Promise<DashboardStats> => {
-    // Get all sales
-    const { data: sales, error: salesError } = await supabase
-      .from('sales')
-      .select('*')
-      .order('date', { ascending: false });
-
-    if (salesError) throw new Error(salesError.message);
-
-    // Get all products
-    const { data: products, error: productsError } = await supabase
-      .from('products')
-      .select('*');
-
-    if (productsError) throw new Error(productsError.message);
-
-    // Calculate stats
-    const totalRevenue = sales?.reduce((sum, sale) => sum + Number(sale.total_price), 0) || 0;
-
-    // Create a map for quick product lookup
-    const productsMap = new Map(products?.map(p => [p.id, p]) || []);
     
-    // Calculate total profit
-    const totalProfit = sales?.reduce((sum, sale) => {
-      const product = productsMap.get(sale.product_id);
-      return product ? sum + (Number(sale.total_price) - (Number(product.cost) * sale.quantity)) : sum;
-    }, 0) || 0;
-
-    // Sales today
-    const today = new Date().toISOString().split('T')[0];
-    const salesToday = sales?.filter(s => s.date.startsWith(today)).length || 0;
-
-    // Low stock items (less than 10)
-    const lowStockItems = products?.filter(p => p.stock < 10).length || 0;
-
-    // Sales by day for last 7 days
-    const salesByDay: { [key: string]: number } = {};
-    sales?.forEach(sale => {
-      const day = new Date(sale.date).toLocaleDateString('en-US', { weekday: 'short' });
-      const product = productsMap.get(sale.product_id);
-      if (product) {
-        const profit = Number(sale.total_price) - (Number(product.cost) * sale.quantity);
-        salesByDay[day] = (salesByDay[day] || 0) + profit;
-      }
-    });
-
-    const last7Days = Array.from({ length: 7 }).map((_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      return d.toLocaleDateString('en-US', { weekday: 'short' });
-    }).reverse();
-
-    const chartData = last7Days.map(day => ({ day, profit: salesByDay[day] || 0 }));
-
-    return {
-      totalRevenue,
-      totalProfit,
-      salesToday,
-      lowStockItems,
-      salesByDay: chartData,
-    };
-  },
-
-  // ============ PRODUCTS ============
-
-  getProducts: async (): Promise<Product[]> => {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .order('name', { ascending: true });
-
-    if (error) throw new Error(error.message);
-    
-    return (data || []).map(p => ({
-      id: p.id,
-      name: p.name,
-      price: Number(p.price),
-      cost: Number(p.cost),
-      stock: p.stock,
-    }));
-  },
-
-  saveProduct: async (product: Omit<Product, 'id'> & { id?: string }): Promise<Product> => {
-    if (product.id) {
-      // Update existing product
-      const { data, error } = await supabase
-        .from('products')
-        .update({
-          name: product.name,
-          price: product.price,
-          cost: product.cost,
-          stock: product.stock,
-        })
-        .eq('id', product.id)
-        .select()
-        .single();
-
-      if (error) throw new Error(error.message);
-      if (!data) throw new Error('Failed to update product');
-
-      return {
-        id: data.id,
-        name: data.name,
-        price: Number(data.price),
-        cost: Number(data.cost),
-        stock: data.stock,
-      };
-    } else {
-      // Create new product
-      const { data, error } = await supabase
-        .from('products')
-        .insert({
-          name: product.name,
-          price: product.price,
-          cost: product.cost,
-          stock: product.stock,
-        })
-        .select()
-        .single();
-
-      if (error) throw new Error(error.message);
-      if (!data) throw new Error('Failed to create product');
-
-      return {
-        id: data.id,
-        name: data.name,
-        price: Number(data.price),
-        cost: Number(data.cost),
-        stock: data.stock,
-      };
-    }
-  },
-
-  deleteProduct: async (productId: string): Promise<void> => {
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', productId);
-
-    if (error) throw new Error(error.message);
-  },
-
-  // ============ SALES ============
-
-  getSales: async (): Promise<Sale[]> => {
-    const { data, error } = await supabase
-      .from('sales')
-      .select('*')
-      .order('date', { ascending: false })
-      .limit(50); // Get last 50 sales
-
-    if (error) throw new Error(error.message);
-
-    return (data || []).map(s => ({
-      id: s.id,
-      productId: s.product_id,
-      productName: s.product_name,
-      quantity: s.quantity,
-      totalPrice: Number(s.total_price),
-      date: s.date,
-    }));
-  },
-
-  logSale: async (productId: string, quantity: number): Promise<Sale> => {
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    // Get product details
-    const { data: product, error: productError } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', productId)
-      .single();
-
-    if (productError) throw new Error(productError.message);
-    if (!product) throw new Error('Product not found');
-
-    // Check stock
-    if (product.stock < quantity) {
-      throw new Error(`Not enough stock. Available: ${product.stock}`);
+    if (userError || !userData) {
+      // If the profile is missing after a successful login, it's a critical data inconsistency.
+      // Sign out the user to prevent them from being in a broken, half-logged-in state.
+      await supabase.auth.signOut();
+      console.error("User profile fetch error:", userError?.message);
+      throw new Error('Login successful, but user profile not found. Please contact an admin.');
     }
 
-    // Update stock
-    const { error: updateError } = await supabase
-      .from('products')
-      .update({ stock: product.stock - quantity })
-      .eq('id', productId);
-
-    if (updateError) throw new Error(updateError.message);
-
-    // Log sale
-    const totalPrice = Number(product.price) * quantity;
-    const { data: sale, error: saleError } = await supabase
-      .from('sales')
-      .insert({
-        product_id: productId,
-        product_name: product.name,
-        quantity,
-        total_price: totalPrice,
-        user_id: user.id,
-      })
-      .select()
-      .single();
-
-    if (saleError) throw new Error(saleError.message);
-    if (!sale) throw new Error('Failed to log sale');
-
-    return {
-      id: sale.id,
-      productId: sale.product_id,
-      productName: sale.product_name,
-      quantity: sale.quantity,
-      totalPrice: Number(sale.total_price),
-      date: sale.date,
-    };
+    return userData as User;
   },
 
-  updateSale: async (saleId: string, productId: string, quantity: number): Promise<Sale> => {
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+  async getDashboardStats(): Promise<DashboardStats> {
+    const { data: sales, error: salesError } = await supabase.from('sales').select('*');
+    const { data: products, error: productsError } = await supabase.from('products').select('*');
+    if (salesError || productsError) throw new Error(salesError?.message || productsError?.message);
 
-    // Get the old sale to restore stock
-    const { data: oldSale, error: oldSaleError } = await supabase
-      .from('sales')
-      .select('*')
-      .eq('id', saleId)
-      .single();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    if (oldSaleError) throw new Error(oldSaleError.message);
-    if (!oldSale) throw new Error('Sale not found');
+    const salesTodayCount = sales.filter(s => new Date(s.date) >= today).length;
+    const totalRevenue = sales.reduce((sum, s) => sum + s.totalPrice, 0);
 
-    // Get old product to restore stock
-    const { data: oldProduct, error: oldProductError } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', oldSale.product_id)
-      .single();
+    const totalProfit = sales.reduce((sum, sale) => {
+      const product = products.find(p => p.id === sale.productId);
+      const cost = product ? product.cost : 0;
+      return sum + (sale.totalPrice - (sale.quantity * cost));
+    }, 0);
 
-    if (oldProductError) throw new Error(oldProductError.message);
-    if (!oldProduct) throw new Error('Old product not found');
+    const lowStockItems = products.filter(p => p.stock < 10).length;
 
-    // Restore stock from old sale
-    await supabase
-      .from('products')
-      .update({ stock: oldProduct.stock + oldSale.quantity })
-      .eq('id', oldSale.product_id);
+    const salesByDay: { day: string; profit: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
 
-    // Get new product details
-    const { data: newProduct, error: newProductError } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', productId)
-      .single();
+      const nextDate = new Date(date);
+      nextDate.setDate(nextDate.getDate() + 1);
 
-    if (newProductError) throw new Error(newProductError.message);
-    if (!newProduct) throw new Error('Product not found');
+      const daySales = sales.filter(s => {
+        const saleDate = new Date(s.date);
+        return saleDate >= date && saleDate < nextDate;
+      });
 
-    // Check new stock
-    if (newProduct.stock < quantity) {
-      // Rollback: restore old sale stock
-      await supabase
-        .from('products')
-        .update({ stock: oldProduct.stock })
-        .eq('id', oldSale.product_id);
-      throw new Error(`Not enough stock. Available: ${newProduct.stock}`);
+      const dayProfit = daySales.reduce((sum, sale) => {
+        const product = products.find(p => p.id === sale.productId);
+        const cost = product ? product.cost : 0;
+        return sum + (sale.totalPrice - (sale.quantity * cost));
+      }, 0);
+
+      salesByDay.push({
+        day: date.toLocaleString('en-US', { weekday: 'short' }),
+        profit: dayProfit,
+      });
     }
 
-    // Update new product stock
-    await supabase
-      .from('products')
-      .update({ stock: newProduct.stock - quantity })
-      .eq('id', productId);
-
-    // Update sale
-    const totalPrice = Number(newProduct.price) * quantity;
-    const { data: updatedSale, error: updateError } = await supabase
-      .from('sales')
-      .update({
-        product_id: productId,
-        product_name: newProduct.name,
-        quantity,
-        total_price: totalPrice,
-      })
-      .eq('id', saleId)
-      .select()
-      .single();
-
-    if (updateError) throw new Error(updateError.message);
-    if (!updatedSale) throw new Error('Failed to update sale');
-
-    return {
-      id: updatedSale.id,
-      productId: updatedSale.product_id,
-      productName: updatedSale.product_name,
-      quantity: updatedSale.quantity,
-      totalPrice: Number(updatedSale.total_price),
-      date: updatedSale.date,
-    };
+    return { totalRevenue, totalProfit, salesToday: salesTodayCount, lowStockItems, salesByDay };
   },
 
-  deleteSale: async (saleId: string): Promise<void> => {
-    // Get the sale to restore stock
-    const { data: sale, error: saleError } = await supabase
-      .from('sales')
-      .select('*')
-      .eq('id', saleId)
-      .single();
-
-    if (saleError) throw new Error(saleError.message);
-    if (!sale) throw new Error('Sale not found');
-
-    // Get product to restore stock
-    const { data: product, error: productError } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', sale.product_id)
-      .single();
-
-    if (productError) throw new Error(productError.message);
-    if (!product) throw new Error('Product not found');
-
-    // Restore stock
-    await supabase
-      .from('products')
-      .update({ stock: product.stock + sale.quantity })
-      .eq('id', sale.product_id);
-
-    // Delete sale
-    const { error: deleteError } = await supabase
-      .from('sales')
-      .delete()
-      .eq('id', saleId);
-
-    if (deleteError) throw new Error(deleteError.message);
-  },
-
-  // ============ USERS ============
-
-  getUsers: async (): Promise<User[]> => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .order('name', { ascending: true });
-
+  async getUsers(): Promise<User[]> {
+    const { data, error } = await supabase.from('users').select('*');
     if (error) throw new Error(error.message);
-
-    return (data || []).map(u => ({
-      id: u.id,
-      email: u.email,
-      name: u.name,
-      role: u.role,
-    }));
+    return data || [];
   },
 
-  saveUser: async (user: Omit<User, 'id'> & { id?: string; password?: string }): Promise<User> => {
-    if (user.id) {
-      // Update existing user
+  async saveUser(user: Partial<User> & { password?: string }): Promise<User> {
+    if (user.id) { // Update
       const { data, error } = await supabase
         .from('users')
-        .update({
-          name: user.name,
-          email: user.email,
-          role: user.role,
-        })
+        .update({ name: user.name, role: user.role, email: user.email })
         .eq('id', user.id)
         .select()
         .single();
-
       if (error) throw new Error(error.message);
-      if (!data) throw new Error('Failed to update user');
-
-      // Update password if provided
-      if (user.password) {
-        const { error: passwordError } = await supabase.auth.admin.updateUserById(
-          user.id,
-          { password: user.password }
-        );
-        if (passwordError) throw new Error(passwordError.message);
+      
+      // Update auth email if changed
+      if (user.email) {
+          const { data: authUser, error: authError } = await supabase.auth.updateUser({ email: user.email });
+          if(authError) console.error("Could not update auth user's email", authError);
       }
-
-      return {
-        id: data.id,
-        email: data.email,
-        name: data.name,
-        role: data.role,
-      };
-    } else {
-      // Create new user
-      if (!user.password) throw new Error('Password is required for new users');
-
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      return data as User;
+    } else { // Create
+      if (!user.email || !user.password) {
+        throw new Error("Email and password are required for new users.");
+      }
+      const { data, error } = await supabase.auth.signUp({
         email: user.email,
         password: user.password,
-        email_confirm: true, // Auto-confirm email
+        options: {
+          data: {
+            name: user.name,
+            role: user.role,
+          },
+        },
       });
-
-      if (authError) throw new Error(authError.message);
-      if (!authData.user) throw new Error('Failed to create user');
-
-      // Create user profile
-      const { data: userData, error: userError } = await supabase
+      if (error || !data.user) throw new Error(error?.message || "Could not create user.");
+      
+      // The user profile is created by a trigger in Supabase, so we just return it.
+      const { data: newUserProfile, error: profileError } = await supabase
         .from('users')
-        .insert({
-          id: authData.user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-        })
-        .select()
+        .select('*')
+        .eq('id', data.user.id)
         .single();
 
-      if (userError) {
-        // Cleanup
-        await supabase.auth.admin.deleteUser(authData.user.id);
-        throw new Error(userError.message);
-      }
+      if (profileError || !newUserProfile) throw new Error(profileError?.message || "Could not fetch new user profile.");
 
-      if (!userData) throw new Error('Failed to create user profile');
-
-      return {
-        id: userData.id,
-        email: userData.email,
-        name: userData.name,
-        role: userData.role,
-      };
+      return newUserProfile as User;
     }
   },
 
-  deleteUser: async (userId: string): Promise<void> => {
-    // Delete from public.users first (will cascade)
+  async deleteUser(userId: string): Promise<void> {
+    // Note: This only deletes the user profile. The auth user remains.
+    // Deleting auth users requires admin privileges and is unsafe from the client.
+    const { error } = await supabase.from('users').delete().eq('id', userId);
+    if (error) throw new Error(error.message);
+  },
+
+  async getProducts(): Promise<Product[]> {
+    const { data, error } = await supabase.from('products').select('*');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async saveProduct(product: Partial<Product>): Promise<Product> {
+    const { data, error } = await supabase
+      .from('products')
+      .upsert({ ...product })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data as Product;
+  },
+
+  async deleteProduct(productId: string): Promise<void> {
+    const { error } = await supabase.from('products').delete().eq('id', productId);
+    if (error) throw new Error(error.message);
+  },
+
+  async getSales(): Promise<Sale[]> {
+    const { data, error } = await supabase.from('sales').select('*').order('date', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async recordSale(saleData: { productId: string; quantity: number }): Promise<Sale> {
+    const { data, error } = await supabase.rpc('record_sale', {
+        product_id_in: saleData.productId,
+        quantity_in: saleData.quantity
+    }).single();
+
+    if (error) {
+        console.error("RPC Error:", error);
+        throw new Error(error.message);
+    }
+    if (!data) throw new Error("Failed to record sale, no data returned.");
+    
+    // The RPC function returns a single record of the new sale.
+    return data as Sale;
+  },
+  
+  async deleteSale(saleId: string): Promise<void> {
+    // This should be a transaction in a real app, but for now, we'll perform the operations sequentially.
+
+    // 1. Fetch the sale to get product ID and quantity
+    const { data: saleToDelete, error: fetchError } = await supabase
+        .from('sales')
+        .select('productId, quantity')
+        .eq('id', saleId)
+        .single();
+    
+    if (fetchError || !saleToDelete) {
+        throw new Error(fetchError?.message || "Sale not found");
+    }
+
+    const { productId, quantity } = saleToDelete;
+
+    // 2. Fetch the current product to get its stock
+    const { data: product, error: productError } = await supabase
+        .from('products')
+        .select('stock')
+        .eq('id', productId)
+        .single();
+
+    if (productError || !product) {
+        throw new Error(productError?.message || "Product associated with sale not found");
+    }
+
+    // 3. Calculate and update the product's stock
+    const newStock = product.stock + quantity;
+    const { error: updateError } = await supabase
+        .from('products')
+        .update({ stock: newStock })
+        .eq('id', productId);
+
+    if (updateError) {
+        throw new Error(`Failed to restore stock: ${updateError.message}`);
+    }
+
+    // 4. Finally, delete the sale record
     const { error: deleteError } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', userId);
+        .from('sales')
+        .delete()
+        .eq('id', saleId);
 
-    if (deleteError) throw new Error(deleteError.message);
+    if (deleteError) {
+        // This is a problematic state: stock was restored but the sale wasn't deleted.
+        // A database transaction (via another RPC function) would be the proper fix.
+        // For now, we will throw an error and log a warning.
+        console.warn(`CRITICAL: Product stock for ID ${productId} was restored, but failed to delete sale ID ${saleId}. Manual database correction may be required.`);
+        throw new Error(`Failed to delete sale after restoring stock: ${deleteError.message}`);
+    }
+  },
 
-    // Delete auth user
-    const { error: authError } = await supabase.auth.admin.deleteUser(userId);
-    if (authError) throw new Error(authError.message);
+  async getSalesSummary(): Promise<SalesSummary> {
+    // This logic remains client-side for now but could be moved to a db function.
+    const { data: sales, error: salesError } = await supabase.from('sales').select('*');
+    const { data: allProducts, error: productsError } = await supabase.from('products').select('*');
+    if (salesError || productsError) throw new Error(salesError?.message || productsError?.message);
+
+    const now = new Date();
+    
+    const getProfit = (sale: Sale) => {
+        const product = allProducts.find(p => p.id === sale.productId);
+        const cost = product ? product.cost : 0;
+        return sale.totalPrice - (sale.quantity * cost);
+    };
+
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    const currentDay = now.getDay();
+    const weekStartDate = new Date(now);
+    weekStartDate.setDate(now.getDate() - currentDay);
+    weekStartDate.setHours(0, 0, 0, 0);
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const yearStart = new Date(now.getFullYear(), 0, 1);
+
+    const dailySales = sales.filter(s => new Date(s.date) >= todayStart);
+    const weeklySales = sales.filter(s => new Date(s.date) >= weekStartDate);
+    const monthlySales = sales.filter(s => new Date(s.date) >= monthStart);
+    const yearlySales = sales.filter(s => new Date(s.date) >= yearStart);
+
+    return {
+      daily: {
+        sales: dailySales.reduce((sum, s) => sum + s.totalPrice, 0),
+        profit: dailySales.reduce((sum, s) => sum + getProfit(s), 0),
+      },
+      weekly: {
+        sales: weeklySales.reduce((sum, s) => sum + s.totalPrice, 0),
+        profit: weeklySales.reduce((sum, s) => sum + getProfit(s), 0),
+      },
+      monthly: {
+        sales: monthlySales.reduce((sum, s) => sum + s.totalPrice, 0),
+        profit: monthlySales.reduce((sum, s) => sum + getProfit(s), 0),
+      },
+      yearly: {
+        sales: yearlySales.reduce((sum, s) => sum + s.totalPrice, 0),
+        profit: yearlySales.reduce((sum, s) => sum + getProfit(s), 0),
+      },
+    };
   },
 };
