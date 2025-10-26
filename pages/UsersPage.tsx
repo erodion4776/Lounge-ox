@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { User } from '../types';
-import { useAuth } from '../App';
+import { useAuth } from '../contexts/AuthContext';
 
 const UserForm: React.FC<{ user?: User | null; onSave: () => void; onCancel: () => void }> = ({ user, onSave, onCancel }) => {
     const [formData, setFormData] = useState<Partial<User> & { password?: string }>({ 
