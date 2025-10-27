@@ -1,6 +1,8 @@
 
+
 import React, { useState, useContext, createContext, useMemo, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, Outlet, Navigate, useLocation } from 'react-router-dom';
+import { AuthApiError } from '@supabase/supabase-js';
 import { User } from './types';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './DashboardPage';
@@ -98,11 +100,14 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
         
         if (authError) {
+            if (authError instanceof AuthApiError && authError.message.includes('Email not confirmed')) {
+                throw new Error('Login failed: Please check your email to confirm your account first.');
+            }
             throw new Error(authError.message);
         }
 
         if (!authData.user) {
-            throw new Error("Login successful, but no user data was returned.");
+            throw new Error("Login successful, but no user data was returned. Please try again.");
         }
 
         const { data: userProfile, error: profileError } = await supabase
@@ -113,12 +118,12 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
         if (profileError) {
             await supabase.auth.signOut();
-            throw new Error(`Login failed: Could not retrieve user profile. ${profileError.message}`);
+            throw new Error(`Login failed: Could not retrieve your user profile after authentication. This might be due to a network issue or a permissions problem (Row Level Security) in the database. Details: ${profileError.message}`);
         }
         
         if (!userProfile) {
             await supabase.auth.signOut();
-            const errorMessage = `Login failed: User authenticated successfully (UID: ${authData.user.id}), but no corresponding profile was found in the 'users' table. This is often caused by a missing database trigger. Signing out.`;
+            const errorMessage = `Login failed: User authenticated successfully (UID: ${authData.user.id}), but no corresponding profile was found in the 'users' table. This is often caused by a missing database trigger that should copy new users into the public profile table. Please check your Supabase project settings. Signing out.`;
             throw new Error(errorMessage);
         }
         
@@ -126,6 +131,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
     } catch (e) {
         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred during login.';
+        console.error("Login process error:", e);
         setLoginError(errorMessage);
     } finally {
         setIsLoggingIn(false);
