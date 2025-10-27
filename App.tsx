@@ -1,3 +1,4 @@
+
 import React, { useState, useContext, createContext, useMemo, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { User } from './types';
@@ -9,17 +10,9 @@ import UsersPage from './pages/UsersPage';
 import { supabase } from './services/supabase';
 import { api } from './services/api';
 
-// A reusable spinner component for loading states
-const Spinner = () => (
-    <div className="flex justify-center items-center h-full">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-400"></div>
-    </div>
-);
-
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (user: User) => void;
   logout: () => Promise<void>;
 }
 
@@ -85,10 +78,6 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     };
   }, []);
 
-  const login = (newUser: User) => {
-    setUser(newUser);
-  };
-
   const logout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -97,38 +86,28 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     // onAuthStateChange will handle setting user to null and updating state.
   };
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading]);
+  const value = useMemo(() => ({ user, loading, logout }), [user, loading]);
   
   if (loading) {
-      return (
-        <div className="flex flex-col justify-center items-center h-screen bg-gray-900 text-white">
-            <Spinner />
-            <p className="mt-4 text-lg">Loading session...</p>
-        </div>
-      );
+      return <div className="flex justify-center items-center h-screen bg-gray-900 text-white">Loading session...</div>;
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// FIX: Refactored ProtectedRoute to be a layout route component that renders an <Outlet /> for nested routes.
-// This is a more idiomatic approach in React Router v6 and avoids potential issues with nested <Routes> components.
-function ProtectedRoute(): React.ReactElement {
+
+const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
   
   if (loading) {
-      return (
-        <div className="flex justify-center items-center h-screen bg-gray-900 text-white">
-            <Spinner />
-        </div>
-      );
+      return <div className="flex justify-center items-center h-screen bg-gray-900 text-white">Loading...</div>
   }
 
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-  return <Outlet />;
-}
+  return <>{children}</>;
+};
 
 const Sidebar: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
     const { user, logout } = useAuth();
@@ -239,16 +218,19 @@ export const App = () => {
       <HashRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          {/* FIX: Refactored routing structure to be flat, avoiding nested <Routes> and using layout routes correctly. */}
-          <Route element={<ProtectedRoute />}>
-            <Route element={<ProtectedLayout />}>
-                <Route index element={<DashboardPage />} />
-                <Route path="sales" element={<SalesPage />} />
-                <Route path="products" element={<ProductsPage />} />
-                <Route path="users" element={<UsersPage />} />
-                <Route path="*" element={<Navigate to="/" />} />
-            </Route>
-          </Route>
+          <Route path="/*" element={
+            <ProtectedRoute>
+              <Routes>
+                <Route element={<ProtectedLayout />}>
+                    <Route index element={<DashboardPage />} />
+                    <Route path="sales" element={<SalesPage />} />
+                    <Route path="products" element={<ProductsPage />} />
+                    <Route path="users" element={<UsersPage />} />
+                    <Route path="*" element={<Navigate to="/" />} />
+                </Route>
+              </Routes>
+            </ProtectedRoute>
+          } />
         </Routes>
       </HashRouter>
     </AuthProvider>

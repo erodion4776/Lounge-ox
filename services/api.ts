@@ -1,32 +1,18 @@
+
 import { User, Product, Sale, DashboardStats, SalesSummary } from '../types';
 import { supabase } from './supabase';
 
 const simulateDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const api = {
-  async signIn(email: string, password: string): Promise<User> {
-    const { data, error } = await supabase.auth.signInWithPassword({
+  async signIn(email: string, password: string): Promise<void> {
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    if (error || !data.user) throw new Error(error?.message || 'Invalid credentials');
-
-    // Fetch user profile from public `users` table
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', data.user.id)
-      .single();
-    
-    if (userError || !userData) {
-      // If the profile is missing after a successful login, it's a critical data inconsistency.
-      // Sign out the user to prevent them from being in a broken, half-logged-in state.
-      await supabase.auth.signOut();
-      console.error("User profile fetch error:", userError?.message);
-      throw new Error('Login successful, but user profile not found. Please contact an admin.');
-    }
-
-    return userData as User;
+    if (error) throw new Error(error.message || 'Invalid credentials');
+    // The onAuthStateChange listener in AuthProvider will handle fetching the user profile 
+    // and updating the user state.
   },
 
   async getDashboardStats(): Promise<DashboardStats> {

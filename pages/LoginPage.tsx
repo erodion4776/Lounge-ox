@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
 import { api } from '../services/api';
@@ -63,21 +64,42 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
-  const { login } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // If the user is already authenticated, redirect them to the dashboard.
+    if (user) {
+      navigate('/', { replace: true });
+    }
+  }, [user, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    const loginPromise = api.signIn(email, password);
+    
+    // Set a 10-second timeout for the login attempt.
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Login timed out. Please check your network connection and Supabase project status.')), 10000)
+    );
+
     try {
-      const user = await api.signIn(email, password);
-      login(user);
-      navigate('/');
+      await Promise.race([loginPromise, timeoutPromise]);
+      // On successful sign-in, the onAuthStateChange listener will trigger,
+      // which updates the user state. The useEffect hook will then redirect.
+      // We leave the button in a loading state until the navigation occurs.
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to login. Please check your credentials.';
-      setError(message);
-    } finally {
+      let displayMessage = 'Failed to login. Please check your credentials.';
+      if (err instanceof Error) {
+        displayMessage = err.message;
+        if (err.message.toLowerCase().includes('invalid login credentials')) {
+            displayMessage = 'Invalid login credentials.\n\nPlease double-check your email and password. If the issue persists, the app might not be configured with the correct Supabase project credentials in `services/supabase.ts`.';
+        }
+      }
+      setError(displayMessage);
       setLoading(false);
     }
   };
@@ -126,7 +148,7 @@ const LoginPage: React.FC = () => {
                     Forgot Password?
                 </button>
             </div>
-            {error && <p className="text-sm text-red-400 text-center">{error}</p>}
+            {error && <p className="text-sm text-red-400 text-center whitespace-pre-wrap">{error}</p>}
             <button
               type="submit"
               disabled={loading}
