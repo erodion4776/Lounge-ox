@@ -37,30 +37,52 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
-    // This effect runs once on mount to check the initial session and set up the listener.
+    // This effect now robustly handles the initial session loading.
     const getInitialSessionAndProfile = async () => {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-            const { data: userProfile } = await supabase
-              .from('users')
-              .select('*')
-              .eq('id', session.user.id)
-              .single();
-            setUser(userProfile as User || null);
-        }
-        setLoading(false);
-    };
+        try {
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            if (sessionError) throw sessionError;
 
+            if (session?.user) {
+                const { data: userProfile, error: profileError } = await supabase
+                  .from('users')
+                  .select('*')
+                  .eq('id', session.user.id)
+                  .single();
+
+                if (profileError) {
+                    console.error('Error fetching profile for initial session:', profileError);
+                    setUser(null);
+                } else {
+                    setUser(userProfile as User || null);
+                }
+            } else {
+                setUser(null);
+            }
+        } catch (e) {
+            console.error('Failed to get initial session:', e);
+            setUser(null);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
     getInitialSessionAndProfile();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (session?.user) {
-             const { data: userProfile } = await supabase
+             const { data: userProfile, error: profileError } = await supabase
               .from('users')
               .select('*')
               .eq('id', session.user.id)
               .single();
-            setUser(userProfile as User || null);
+
+             if (profileError) {
+                console.error('Error fetching profile on auth state change:', profileError);
+                setUser(null);
+             } else {
+                setUser(userProfile as User || null);
+             }
         } else {
             setUser(null);
         }
@@ -104,8 +126,6 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
             throw new Error(`Login failed: User authenticated, but no profile was found in the 'users' table. This can happen if the database trigger to create a profile is missing. Please check your Supabase setup.`);
         }
         
-        // The onAuthStateChange listener will handle setting the user, but we
-        // set it here as well to make the UI update feel instantaneous.
         setUser(userProfile as User);
 
     } catch (e) {
@@ -122,7 +142,6 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     if (error) {
         console.error("Error during sign out:", error.message);
     }
-    // setUser(null) is handled by the onAuthStateChange listener.
   };
 
   const value = useMemo(() => ({ user, loading, isLoggingIn, loginError, login, logout }), [user, loading, isLoggingIn, loginError]);
