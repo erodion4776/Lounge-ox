@@ -1,19 +1,10 @@
+
 import { User, Product, Sale, DashboardStats, SalesSummary } from '../types';
 import { supabase } from './supabase';
 
 const simulateDelay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const api = {
-  async signIn(email: string, password: string): Promise<void> {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) throw new Error(error.message || 'Invalid credentials');
-    // The onAuthStateChange listener in AuthProvider will handle fetching the user profile 
-    // and updating the user state.
-  },
-
   async getDashboardStats(): Promise<DashboardStats> {
     const { data: sales, error: salesError } = await supabase.from('sales').select('*');
     const { data: products, error: productsError } = await supabase.from('products').select('*');

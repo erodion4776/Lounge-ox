@@ -9,11 +9,13 @@ import ProductsPage from './pages/ProductsPage';
 import UsersPage from './pages/UsersPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import { supabase } from './services/supabase';
-import { api } from './services/api';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  isLoggingIn: boolean;
+  loginError: string | null;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -30,11 +32,12 @@ export const useAuth = () => {
 const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
 
   useEffect(() => {
     const sessionLoadTimeout = setTimeout(() => {
-        // This check prevents setting state if the component unmounted
-        // or if the auth state change has already resolved.
         if (loading) { 
             console.warn("Session loading timed out after 15 seconds. Showing login page.");
             setLoading(false);
@@ -44,15 +47,6 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         try {
             if (session?.user) {
-                // --- TROUBLESHOOTING NOTE ---
-                // If login is successful but the user is immediately logged out or the app hangs,
-                // check the following in your Supabase project:
-                // 1. A `public.users` table exists with the correct columns (id, name, role, email).
-                // 2. A trigger is set up to create a user profile in `public.users` on new user signup.
-                //    (Search for "Supabase sync user profile trigger" for examples).
-                // 3. Row Level Security (RLS) is enabled on the `users` table and a policy exists
-                //    that allows authenticated users to read their own profile.
-                //    Example policy for SELECT: `auth.uid() = id`
                 const { data: userProfile, error } = await supabase
                   .from('users')
                   .select('*')
@@ -61,16 +55,16 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
                 if (error) {
                     console.error("Error fetching user profile:", error.message);
-                    // Do not sign out on a transient error. The session is still valid.
-                    // If this fails on initial load, `user` will remain `null` and the
-                    // login page will be shown. If it fails on a background refresh,
-                    // the existing `user` state will be preserved, keeping the user logged in.
+                    setLoginError("Login failed: Could not retrieve user profile. Please contact an administrator.");
+                    await supabase.auth.signOut();
+                    setUser(null);
                 } else if (userProfile) {
                     setUser(userProfile as User);
+                    setLoginError(null);
                 } else {
-                    console.error(
-                        `Login failed: User authenticated successfully (UID: ${session.user.id}), but no corresponding profile was found in the 'users' table. This is often caused by a missing database trigger that should create the profile upon user signup. Signing out.`
-                    );
+                    const errorMessage = `Login failed: User authenticated successfully (UID: ${session.user.id}), but no corresponding profile was found in the 'users' table. This is often caused by a missing database trigger. Signing out.`;
+                    console.error(errorMessage);
+                    setLoginError(errorMessage);
                     await supabase.auth.signOut();
                     setUser(null);
                 }
@@ -79,10 +73,13 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
             }
         } catch (e) {
             console.error("An unexpected error occurred in onAuthStateChange:", e);
+            const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
+            setLoginError(`An unexpected error occurred: ${errorMessage}`);
             setUser(null); // Ensure user is null on any unexpected error
         } finally {
             clearTimeout(sessionLoadTimeout);
             setLoading(false);
+            setIsLoggingIn(false);
         }
     });
     
@@ -92,15 +89,30 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     };
   }, []);
 
+  const login = async (email: string, password: string) => {
+    setIsLoggingIn(true);
+    setLoginError(null);
+    try {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+            setLoginError(error.message);
+            setIsLoggingIn(false);
+        }
+    } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred during login.';
+        setLoginError(errorMessage);
+        setIsLoggingIn(false);
+    }
+  };
+
   const logout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
         console.error("Error during sign out:", error.message);
     }
-    // onAuthStateChange will handle setting user to null and updating state.
   };
 
-  const value = useMemo(() => ({ user, loading, logout }), [user, loading]);
+  const value = useMemo(() => ({ user, loading, isLoggingIn, loginError, login, logout }), [user, loading, isLoggingIn, loginError]);
   
   if (loading) {
       return <div className="flex justify-center items-center h-screen bg-gray-900 text-white">Loading session...</div>;
