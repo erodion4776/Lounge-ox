@@ -37,38 +37,8 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
-    // This effect now robustly handles the initial session loading.
-    const getInitialSessionAndProfile = async () => {
-        try {
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            if (sessionError) throw sessionError;
-
-            if (session?.user) {
-                const { data: userProfile, error: profileError } = await supabase
-                  .from('users')
-                  .select('*')
-                  .eq('id', session.user.id)
-                  .single();
-
-                if (profileError) {
-                    console.error('Error fetching profile for initial session:', profileError);
-                    setUser(null);
-                } else {
-                    setUser(userProfile as User || null);
-                }
-            } else {
-                setUser(null);
-            }
-        } catch (e) {
-            console.error('Failed to get initial session:', e);
-            setUser(null);
-        } finally {
-            setLoading(false);
-        }
-    };
-    
-    getInitialSessionAndProfile();
-
+    // This is the single source of truth for auth state.
+    // It fires once on load with the initial session, and then for any changes.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
         if (session?.user) {
              const { data: userProfile, error: profileError } = await supabase
@@ -86,6 +56,8 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         } else {
             setUser(null);
         }
+        // This is crucial: set loading to false only after the initial check is complete.
+        setLoading(false);
     });
     
     return () => {
@@ -110,28 +82,15 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
             throw new Error("Login did not return a user session. Please try again.");
         }
 
-        const { data: userProfile, error: profileError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', authData.user.id)
-          .single();
-
-        if (profileError) {
-            await supabase.auth.signOut();
-            throw new Error(`Login failed: Could not retrieve your user profile after authentication. This might be a permissions problem (Row Level Security). Details: ${profileError.message}`);
-        }
-        
-        if (!userProfile) {
-            await supabase.auth.signOut();
-            throw new Error(`Login failed: User authenticated, but no profile was found in the 'users' table. This can happen if the database trigger to create a profile is missing. Please check your Supabase setup.`);
-        }
-        
-        setUser(userProfile as User);
+        // After successful login, the onAuthStateChange listener will handle fetching the profile
+        // and setting the user state, so we don't need to do it here.
 
     } catch (e) {
         const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred during login.';
         console.error("Login process error:", e);
         setLoginError(errorMessage);
+        // Explicitly clear user if login fails after a potential session was initiated but profile failed
+        setUser(null);
     } finally {
         setIsLoggingIn(false);
     }
@@ -142,6 +101,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     if (error) {
         console.error("Error during sign out:", error.message);
     }
+    // The onAuthStateChange listener will handle setting user to null.
   };
 
   const value = useMemo(() => ({ user, loading, isLoggingIn, loginError, login, logout }), [user, loading, isLoggingIn, loginError]);
