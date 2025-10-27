@@ -44,6 +44,15 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         try {
             if (session?.user) {
+                // --- TROUBLESHOOTING NOTE ---
+                // If login is successful but the user is immediately logged out or the app hangs,
+                // check the following in your Supabase project:
+                // 1. A `public.users` table exists with the correct columns (id, name, role, email).
+                // 2. A trigger is set up to create a user profile in `public.users` on new user signup.
+                //    (Search for "Supabase sync user profile trigger" for examples).
+                // 3. Row Level Security (RLS) is enabled on the `users` table and a policy exists
+                //    that allows authenticated users to read their own profile.
+                //    Example policy for SELECT: `auth.uid() = id`
                 const { data: userProfile, error } = await supabase
                   .from('users')
                   .select('*')

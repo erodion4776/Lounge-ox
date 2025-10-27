@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
@@ -81,20 +82,23 @@ const LoginPage: React.FC = () => {
     setError('');
     setLoading(true);
 
-    const loginPromise = api.signIn(email, password);
-    
-    // Set a 20-second timeout for the login attempt. A longer timeout helps with
-    // services that may need to "wake up" on the first request.
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Login timed out. This could be due to a temporary server issue. Please wait a moment and try again.')), 20000)
-    );
+    // Set a timeout as a failsafe. If redirection doesn't happen,
+    // we'll reset the form and show an error. This typically indicates
+    // a problem with fetching the user profile after successful auth.
+    const loginTimeout = setTimeout(() => {
+        setLoading(false);
+        setError(
+          'Login took too long. This can happen if the user profile is missing or cannot be accessed. Please contact an administrator.'
+        );
+    }, 10000); // 10 seconds timeout
 
     try {
-      await Promise.race([loginPromise, timeoutPromise]);
-      // On successful sign-in, the onAuthStateChange listener will trigger,
-      // which updates the user state. The useEffect hook will then redirect.
-      // We leave the button in a loading state until the navigation occurs.
+      await api.signIn(email, password);
+      // On success, we don't clear the timeout. The component will unmount
+      // on successful redirection, which will prevent the timeout from firing.
+      // If it doesn't unmount, the timeout will fire and show an error.
     } catch (err) {
+      clearTimeout(loginTimeout); // Clear the timeout as we have a specific error.
       let displayMessage = 'Failed to login. Please check your credentials.';
       if (err instanceof Error) {
         displayMessage = err.message;
