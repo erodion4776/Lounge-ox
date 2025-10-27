@@ -1,5 +1,4 @@
 
-
 import React, { useState, useContext, createContext, useMemo, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { User } from './types';
@@ -53,8 +52,10 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
                 if (error) {
                     console.error("Error fetching user profile:", error.message);
-                    await supabase.auth.signOut(); // Log out user if profile is inaccessible
-                    setUser(null);
+                    // Do not sign out on a transient error. The session is still valid.
+                    // If this fails on initial load, `user` will remain `null` and the
+                    // login page will be shown. If it fails on a background refresh,
+                    // the existing `user` state will be preserved, keeping the user logged in.
                 } else if (userProfile) {
                     setUser(userProfile as User);
                 } else {
