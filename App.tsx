@@ -1,5 +1,4 @@
 
-
 import React, { useState, useContext, createContext, useMemo, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { AuthApiError } from '@supabase/supabase-js';
@@ -37,61 +36,40 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
-
   useEffect(() => {
-    // This effect is now primarily for loading the initial session on app start
-    // and handling auth state changes from other tabs/windows.
-    const sessionLoadTimeout = setTimeout(() => {
-        if (loading) { 
-            console.warn("Session loading timed out after 15 seconds. Showing login page.");
-            setLoading(false);
+    // This effect runs once on mount to check the initial session and set up the listener.
+    const getInitialSessionAndProfile = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+            const { data: userProfile } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+            setUser(userProfile as User || null);
         }
-    }, 15000);
-
-    const checkSession = async () => {
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                const { data: userProfile, error } = await supabase
-                  .from('users')
-                  .select('*')
-                  .eq('id', session.user.id)
-                  .single();
-
-                if (userProfile && !error) {
-                    setUser(userProfile as User);
-                } else {
-                    // If there's a session but we can't get a profile, log them out.
-                    if (error) console.error("Error fetching profile on session load:", error.message);
-                    await supabase.auth.signOut();
-                    setUser(null);
-                }
-            }
-        } catch (e) {
-            console.error("Error in checkSession:", e);
-        } finally {
-            setLoading(false);
-            clearTimeout(sessionLoadTimeout);
-        }
+        setLoading(false);
     };
-    
-    checkSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_OUT') {
+    getInitialSessionAndProfile();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        if (session?.user) {
+             const { data: userProfile } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+            setUser(userProfile as User || null);
+        } else {
             setUser(null);
-        } else if (event === 'SIGNED_IN' && !user) {
-            // A sign-in happened (e.g. from another tab or after password recovery)
-            // Re-fetch the user profile.
-            checkSession();
         }
     });
     
     return () => {
-        clearTimeout(sessionLoadTimeout);
         subscription.unsubscribe();
     };
-  }, [user]);
+  }, []);
 
   const login = async (email: string, password: string) => {
     setIsLoggingIn(true);
@@ -101,13 +79,13 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         
         if (authError) {
             if (authError instanceof AuthApiError && authError.message.includes('Email not confirmed')) {
-                throw new Error('Login failed: Please check your email to confirm your account first.');
+                throw new Error('Please check your email to confirm your account first.');
             }
             throw new Error(authError.message);
         }
 
         if (!authData.user) {
-            throw new Error("Login successful, but no user data was returned. Please try again.");
+            throw new Error("Login did not return a user session. Please try again.");
         }
 
         const { data: userProfile, error: profileError } = await supabase
@@ -118,15 +96,16 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
         if (profileError) {
             await supabase.auth.signOut();
-            throw new Error(`Login failed: Could not retrieve your user profile after authentication. This might be due to a network issue or a permissions problem (Row Level Security) in the database. Details: ${profileError.message}`);
+            throw new Error(`Login failed: Could not retrieve your user profile after authentication. This might be a permissions problem (Row Level Security). Details: ${profileError.message}`);
         }
         
         if (!userProfile) {
             await supabase.auth.signOut();
-            const errorMessage = `Login failed: User authenticated successfully (UID: ${authData.user.id}), but no corresponding profile was found in the 'users' table. This is often caused by a missing database trigger that should copy new users into the public profile table. Please check your Supabase project settings. Signing out.`;
-            throw new Error(errorMessage);
+            throw new Error(`Login failed: User authenticated, but no profile was found in the 'users' table. This can happen if the database trigger to create a profile is missing. Please check your Supabase setup.`);
         }
         
+        // The onAuthStateChange listener will handle setting the user, but we
+        // set it here as well to make the UI update feel instantaneous.
         setUser(userProfile as User);
 
     } catch (e) {
@@ -143,7 +122,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     if (error) {
         console.error("Error during sign out:", error.message);
     }
-    // setUser(null) is handled by the onAuthStateChange listener
+    // setUser(null) is handled by the onAuthStateChange listener.
   };
 
   const value = useMemo(() => ({ user, loading, isLoggingIn, loginError, login, logout }), [user, loading, isLoggingIn, loginError]);
