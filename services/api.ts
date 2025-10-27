@@ -1,4 +1,3 @@
-
 import { User, Product, Sale, DashboardStats, SalesSummary } from '../types';
 import { supabase } from './supabase';
 

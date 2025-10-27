@@ -8,6 +8,7 @@ import DashboardPage from './DashboardPage';
 import SalesPage from './pages/SalesPage';
 import ProductsPage from './pages/ProductsPage';
 import UsersPage from './pages/UsersPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import { supabase } from './services/supabase';
 import { api } from './services/api';
 
@@ -57,7 +58,9 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
                 } else if (userProfile) {
                     setUser(userProfile as User);
                 } else {
-                    console.warn(`No user profile for UID: ${session.user.id}. Signing out.`);
+                    console.error(
+                        `Login failed: User authenticated successfully (UID: ${session.user.id}), but no corresponding profile was found in the 'users' table. This is often caused by a missing database trigger that should create the profile upon user signup. Signing out.`
+                    );
                     await supabase.auth.signOut();
                     setUser(null);
                 }
@@ -219,6 +222,7 @@ export const App = () => {
       <HashRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/*" element={
             <ProtectedRoute>
               <Routes>

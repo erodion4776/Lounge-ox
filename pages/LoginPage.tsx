@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
@@ -85,7 +86,7 @@ const LoginPage: React.FC = () => {
     // Set a 20-second timeout for the login attempt. A longer timeout helps with
     // services that may need to "wake up" on the first request.
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Login took too long and timed out. This can happen if the database is waking up from sleep. Please try again in a moment.')), 20000)
+      setTimeout(() => reject(new Error('Login timed out. This could be due to a temporary server issue. Please wait a moment and try again.')), 20000)
     );
 
     try {
