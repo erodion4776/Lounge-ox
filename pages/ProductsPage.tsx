@@ -8,6 +8,7 @@ import { useAuth } from '../App';
 const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCancel: () => void }> = ({ product, onSave, onCancel }) => {
     const [formData, setFormData] = useState<Partial<Product>>({ name: '', price: 0, stock: 0, cost: 0 });
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         if (product) {
@@ -24,10 +25,16 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setError('');
         setLoading(true);
-        await api.saveProduct(formData as any);
-        setLoading(false);
-        onSave();
+        try {
+            await api.saveProduct(formData as any);
+            onSave();
+        } catch (err: any) {
+            setError(err.message || 'An unexpected error occurred. Please check permissions.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -53,6 +60,7 @@ const ProductForm: React.FC<{ product?: Product | null; onSave: () => void; onCa
                             <input type="number" name="stock" value={formData.stock} onChange={handleChange} required className="mt-1 w-full bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-amber-500 focus:border-amber-500" />
                         </div>
                     </div>
+                    {error && <p className="text-sm text-red-400">{error}</p>}
                     <div className="flex justify-end gap-4 pt-4">
                         <button type="button" onClick={onCancel} className="py-2 px-4 rounded-md text-gray-300 bg-gray-600 hover:bg-gray-500">Cancel</button>
                         <button type="submit" disabled={loading} className="py-2 px-4 rounded-md text-gray-900 bg-amber-400 hover:bg-amber-500 disabled:bg-gray-500">{loading ? 'Saving...' : 'Save'}</button>
