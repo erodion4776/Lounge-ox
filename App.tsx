@@ -1,4 +1,5 @@
 
+
 import React, { useState, useContext, createContext, useMemo, useEffect } from 'react';
 import { HashRouter, Routes, Route, Link, Outlet, Navigate, useLocation } from 'react-router-dom';
 import { User } from './types';
@@ -35,10 +36,10 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
         // This check prevents setting state if the component unmounted
         // or if the auth state change has already resolved.
         if (loading) { 
-            console.warn("Session loading timed out after 8 seconds. Showing login page.");
+            console.warn("Session loading timed out after 15 seconds. Showing login page.");
             setLoading(false);
         }
-    }, 8000);
+    }, 15000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         try {

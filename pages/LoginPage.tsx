@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
@@ -81,9 +82,10 @@ const LoginPage: React.FC = () => {
 
     const loginPromise = api.signIn(email, password);
     
-    // Set a 10-second timeout for the login attempt.
+    // Set a 20-second timeout for the login attempt. A longer timeout helps with
+    // services that may need to "wake up" on the first request.
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Login timed out. Please check your network connection and Supabase project status.')), 10000)
+      setTimeout(() => reject(new Error('Login took too long and timed out. This can happen if the database is waking up from sleep. Please try again in a moment.')), 20000)
     );
 
     try {
